@@ -38,7 +38,9 @@ any other Atomic Desktop.
 >    reboot to the live USB once, and Wi-Fi works for the rebase.
 >
 > The repo helper `files/scripts/install-mac-wifi-offline.sh` automates
-> downloading these into the image (`just mac-wifi-fetch`).
+> downloading these into the image (run it via `just mac-wifi-setup` from a
+> repo checkout on any internet-connected machine, then commit the fetched
+> RPM with `git add -f files/mac-wifi-pkgs/*.rpm`).
 
 ### What you need
 
