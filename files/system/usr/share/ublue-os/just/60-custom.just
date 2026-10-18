@@ -13,6 +13,16 @@ fix-mac-efi:
     set -euo pipefail
     sudo /usr/local/share/abzu/fix-mac-efi.sh
 
+# Fetch the Broadcom b43 offline firmware pack into THIS repo checkout so it
+# gets baked into the next ISO build (files/mac-wifi-pkgs -> image path
+# /usr/local/share/mac-wifi-pkgs). Run once on any internet-connected machine;
+# then commit the downloaded RPM with `git add -f files/mac-wifi-pkgs/*.rpm`.
+# No network is needed on the target Mac afterwards -- see docs/MAC-INSTALL.md.
+mac-wifi-setup:
+    #!/usr/bin/bash
+    set -euo pipefail
+    bash files/scripts/install-mac-wifi-offline.sh
+
 # Install PC Cartridge System components (requires sudo)
 install-cartridge:
     #!/usr/bin/bash

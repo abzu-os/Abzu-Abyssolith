@@ -218,22 +218,46 @@ modules:
         destination: /etc
       - source: system/var
         destination: /var
+        # usrlocal is handled by its own mapping to /usr/local below; do not
+        # duplicate it into /var/usrlocal in the image.
+        exclude:
+          - ./usrlocal
+          - ./usrlocal/*
+      # CRITICAL: git cannot track an empty-looking path segment literally
+      # named "/usr", so the /usr/local subtree inside system/var is stored
+      # on disk as `system/var/usrlocal`. Copying it verbatim would land the
+      # Abzu helpers at /var/usrlocal/{bin,share} instead of /usr/local/...
+      # Map it explicitly to its true destination and drop it from the /var
+      # copy. (The tar tree BlueBuild builds for this module has no top-level
+      # "./" prefix, hence the "usrlocal/..." strip pattern.)
+      - source: system/var/usrlocal
+        destination: /usr/local
+        toggle-ownership: false
       - source: system/usr/share
         destination: /usr/share
       # CRITICAL: /usr/local is NOT under /usr/share. The packaged
-      # cuneiform-toggle launcher (/usr/local/bin/cuneiform-toggle) and the
-      # usrlocal scripts lived in this tree but were never copied into the
-      # image, because no mapping covered system/usr/local. Result: the
-      # desktop file + favorites entry existed, but Exec pointed at a
-      # non-existent binary -- the "no desktop cuneiform toggle app" report
-      # that survived every previous fix attempt (theming.sh regenerates the
-      # binary at build time, but each BlueBuild script runs in its own
-      # container layer, so files written by one script module are gone by
-      # the time the image commits; only the `files` module persists).
+      # cuneiform-toggle launcher (/usr/local/bin/cuneiform-toggle) lived in
+      # this tree but was never copied into the image, because no mapping
+      # covered system/usr/local. Result: the desktop file + favorites entry
+      # existed, but Exec pointed at a non-existent binary -- the "no desktop
+      # cuneiform toggle app" report that survived every previous fix attempt
+      # (theming.sh regenerates the binary at build time, but each BlueBuild
+      # script runs in its own container layer, so files written by one script
+      # module are gone by the time the image commits; only the `files` module
+      # persists). NOTE: the helpers under system/var/usrlocal are mapped to
+      # /usr/local separately, above.
       - source: system/usr/local/bin
         destination: /usr/local/bin
       - source: etc/skel
         destination: /etc/skel
+      # Offline Broadcom b43 firmware pack for old Intel Macs (BCM4321/4322).
+      # Populated by files/scripts/install-mac-wifi-offline.sh on any
+      # internet-connected machine; consumed at install time by
+      # /usr/local/share/abzu/install-mac-wifi-offline.sh WITHOUT a network.
+      # This breaks the chicken-and-egg loop where rebasing to Abzu required
+      # Wi-Fi that only Abzu's image provides. See docs/MAC-INSTALL.md.
+      - source: mac-wifi-pkgs
+        destination: /usr/local/share/mac-wifi-pkgs
       - source: etc/flatpak/overrides/ai.lmstudio.lm-studio
         destination: /etc/flatpak/overrides/ai.lmstudio.lm-studio
 
