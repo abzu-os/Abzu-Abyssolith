@@ -234,6 +234,14 @@ modules:
         destination: /usr/local/bin
       - source: etc/skel
         destination: /etc/skel
+      # Offline Broadcom b43 firmware pack for old Intel Macs (BCM4321/4322).
+      # Populated by files/scripts/install-mac-wifi-offline.sh on any
+      # internet-connected machine; consumed at install time by
+      # /usr/local/share/abzu/install-mac-wifi-offline.sh WITHOUT a network.
+      # This breaks the chicken-and-egg loop where rebasing to Abzu required
+      # Wi-Fi that only Abzu's image provides. See docs/MAC-INSTALL.md.
+      - source: mac-wifi-pkgs
+        destination: /usr/local/share/mac-wifi-pkgs
       - source: etc/flatpak/overrides/ai.lmstudio.lm-studio
         destination: /etc/flatpak/overrides/ai.lmstudio.lm-studio
 

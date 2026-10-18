@@ -22,6 +22,24 @@ any other Atomic Desktop.
 
 ## Part 1 — Install Fedora Silverblue
 
+> 🛜 **Wi-Fi at work? (BCM4321/4322 Macs, no Ethernet)** A stock Silverblue
+> live USB has no Broadcom firmware, so rebasing normally requires a network
+> you can't reach. Two ways out:
+>
+> 1. **Abzu ISO route:** flash an Abzu-generated ISO instead of the
+>    Silverblue one (see the README's ISO section). It ships the b43
+>    firmware *and* an offline installer pack. From the live desktop run
+>    `sudo /usr/local/share/abzu/install-mac-wifi-offline.sh` — no network
+>    needed — then install/rebase from there.
+> 2. **Manual route:** on any internet-connected machine, download
+>    `b43-firmware*.rpm` + `rpmfusion-nonfree-release-tainted*.rpm` from
+>    RPM Fusion onto a USB stick. On the Silverblue live session:
+>    `rpm -ivh <those RPMs>` then `rpm-ostree install b43-firmware`, reboot
+>    to the live USB once, and Wi-Fi works for the rebase.
+>
+> The repo helper `files/scripts/install-mac-wifi-offline.sh` automates
+> downloading these into the image (`just mac-wifi-fetch`).
+
 ### What you need
 
 1. A USB stick, **8 GB or larger**.
@@ -168,6 +186,14 @@ ESP current across image upgrades:
 
 ```bash
 just install-refind
+```
+
+If Wi-Fi was still dead during the rebase (BCM4321/4322 machines), make the
+firmware permanent inside Abzu as well — the RPMs are already on the ISO/image,
+no network required:
+
+```bash
+sudo /usr/local/share/abzu/install-mac-wifi-offline.sh   # or: just mac-wifi-offline
 ```
 
 > ℹ️ **Why rebase rather than installing an Abzu ISO directly?** The Anaconda
