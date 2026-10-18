@@ -23,14 +23,14 @@ if [ "$ARCH" != x86_64 ]; then
     exit 0
 fi
 
-echo "--- Installing RPM Fusion tainted release (offline) ---"
-rpm -Uvh --replacepkgs --nodeps \
-    "$PKGS"/rpmfusion-nonfree-release*.rpm \
-    "$PKGS"/rpmfusion-nonfree-release-tainted*.rpm 2>/dev/null \
- || rpm -Uvh --replacepkgs "$PKGS"/rpmfusion-nonfree-release-tainted*.rpm
-
-if [ -f "$PKGS/RPM-GPG-KEY-rpmfusion-nonfree-fedora" ]; then
-    rpm --import "$PKGS/RPM-GPG-KEY-rpmfusion-nonfree-fedora" || true
+echo "--- Importing RPM Fusion nonfree GPG key ---"
+# The tainted repo's signing key ships with the pack. We deliberately do NOT
+# install a tainted *release* package offline: b43-firmware is a pure data
+# payload and needs no repo config to install. Once the Mac is online you can
+# enable the tainted repo for updates with:
+#   sudo rpm -Uvh https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+if [ -f "$PKGS/RPM-GPG-KEY-rpmfusion-nonfree" ]; then
+    rpm --import "$PKGS/RPM-GPG-KEY-rpmfusion-nonfree" || true
 fi
 
 echo "--- Installing b43-firmware (offline) ---"

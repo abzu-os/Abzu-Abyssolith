@@ -31,11 +31,11 @@ any other Atomic Desktop.
 >    firmware *and* an offline installer pack. From the live desktop run
 >    `sudo /usr/local/share/abzu/install-mac-wifi-offline.sh` — no network
 >    needed — then install/rebase from there.
-> 2. **Manual route:** on any internet-connected machine, download
->    `b43-firmware*.rpm` + `rpmfusion-nonfree-release-tainted*.rpm` from
->    RPM Fusion onto a USB stick. On the Silverblue live session:
->    `rpm -ivh <those RPMs>` then `rpm-ostree install b43-firmware`, reboot
->    to the live USB once, and Wi-Fi works for the rebase.
+> 2. **Manual route:** on any internet-connected machine, download just
+>    `b43-firmware*.noarch.rpm` from RPM Fusion's tainted repo onto a USB
+>    stick (it is a pure data payload — no release package or deps needed).
+>    On the Silverblue live session: `rpm-ostree install /run/media/.../b43-firmware*.rpm`,
+>    reboot to the live USB once, and Wi-Fi works for the rebase.
 >
 > The repo helper `files/scripts/install-mac-wifi-offline.sh` automates
 > downloading these into the image (`just mac-wifi-fetch`).

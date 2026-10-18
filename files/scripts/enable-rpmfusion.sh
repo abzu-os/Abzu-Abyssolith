@@ -13,7 +13,13 @@ dnf install -y \
 # The tainted sub-repositories. These are needed for b43-firmware,
 # which is not redistributable in a form RPM Fusion can ship in the
 # ordinary nonfree repository.
-dnf install -y "rpmfusion-nonfree-release-tainted"
+# The tainted repo config file ships inside the nonfree release RPM
+# installed above (rpmfusion-nonfree-tainted.repo) — there is no separate
+# "rpmfusion-nonfree-release-tainted" package to install. Enable it and
+# import its key:
+dnf config-manager setopt rpmfusion-nonfree-tainted.enabled=1 2>/dev/null \
+    || dnf config-manager --enable rpmfusion-nonfree-tainted
+rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-rpmfusion-nonfree-fedora-latest
 
 # Refresh the repository metadata so the new tainted repos are visible
 # to the next dnf invocation (the recipe's dnf module).
