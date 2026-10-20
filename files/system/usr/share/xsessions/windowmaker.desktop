@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=WindowMaker
+Comment=GNUstep window manager with the Eau (Aqua-style) theme
+Exec=/usr/local/bin/abzu-windowmaker-session
+TryExec=/usr/local/bin/abzu-windowmaker-session
+Type=Application
+DesktopNames=WindowMaker
