@@ -1,14 +1,13 @@
 # yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
+
 name: abzu
 description: An elegant, powerful operating system for desktops, workstations and homelabs that honours and preserves the ancient traditions.
-base-image: ghcr.io/ublue-os/bluefin
-image-version: stable
+
+base-image: ghcr.io/ublue-os/base-main
+image-version: latest
 
 modules:
-  # Enable RPM Fusion BEFORE the dnf module runs. This script installs the
-  # free, nonfree, and tainted release packages, then refreshes repository
-  # metadata so that the tainted repository's packages (notably
-  # b43-firmware) are resolvable by the dnf module below.
+  # Enable RPM Fusion before the dnf module for codecs and b43-firmware.
   - type: script
     scripts:
       - enable-rpmfusion.sh
@@ -22,14 +21,18 @@ modules:
           chroot: fedora-44-x86_64
     install:
       packages:
-        # Base build tools
+        # --- Core build toolchain (needed for Gershwin/GNUstep source builds) ---
         - git
         - wget
         - gcc
         - gcc-c++
+        - gcc-objc
+        - clang
+        - llvm
         - make
         - cmake
         - ninja-build
+        - meson
         - pkgconf-pkg-config
         - redhat-rpm-config
         - curl
@@ -41,144 +44,106 @@ modules:
         - xz
         - file
 
-        # Boot and platform tools for Intel Macs
-        - mactel-boot
-        - rEFInd
+        # --- GNUstep runtime & libraries ---
+        - libobjc2
+        - libobjc2-devel
+        - gnustep-make
+        - gnustep-base
+        - gnustep-base-devel
+        - gnustep-gui
+        - gnustep-gui-devel
+        - gnustep-back
+        - gnustep-back-devel
 
-        # Container / virtualization tooling
-        - podman
-        - podman-compose
-        - distrobox
+        # --- WindowMaker (the GNUstep window manager) ---
+        - WindowMaker
+        - WindowMaker-extra
+        - WINGs-libs
+        - WINGs-devel
 
-        # Development libraries
-        - wayland-devel
-        - avahi-devel
-        - glib2-devel
-        - gtk3-devel
-        - gtk-layer-shell-devel
-        - libnotify-devel
-        - libxml2-devel
-        - libcurl-devel
+        # --- X11 / graphics development headers for GNUstep & Gershwin ---
+        - libX11-devel
+        - libXext-devel
+        - libXpm-devel
+        - libXft-devel
+        - libXinerama-devel
+        - libXrandr-devel
+        - libXcursor-devel
         - libpng-devel
+        - libjpeg-turbo-devel
+        - libtiff-devel
         - freetype-devel
+        - fontconfig-devel
         - harfbuzz-devel
         - fribidi-devel
-        - libtiff-devel
-        - libffi-devel
-        - libjpeg-turbo-devel
-        - openssl-devel
-        - gnutls
-        - gnutls.i686
-        - libuv-devel
-        - webkit2gtk4.1-devel
-        - libappindicator-gtk3-devel
         - librsvg2-devel
-        - libxdo-devel
+
+        # --- GNUstep/Gershwin build dependencies ---
+        - libxml2-devel
+        - libxslt-devel
+        - openssl-devel
+        - gnutls-devel
+        - libffi-devel
+        - libicu-devel
+        - libcurl-devel
+        - libarchive-devel
+        - libdispatch-devel
+        - libgnome-desktop3-devel
+        - libnotify-devel
+        - dbus-devel
         - alsa-lib-devel
 
-        # Perl modules (for various builds)
-        - perl-FindBin
-        - perl-IPC-Cmd
-        - perl-Time-Piece
+        # --- Display manager (LightDM; WDM is too old for modern Fedora) ---
+        - lightdm
+        - lightdm-gtk-greeter
 
-        # Python tooling
-        - python3-devel
-        - python3-pip
-        - pipx
+        # --- Session / desktop utilities ---
+        - xorg-x11-xinit
+        - xorg-x11-server-Xorg
+        - xterm
+        - desktop-file-utils
+        - shared-mime-info
+        - hicolor-icon-theme
+        - adwaita-icon-theme
 
-        # JavaScript / Rust / Tauri build tools
-        - npm
-        - nodejs
-        - cargo
-        - rust
-
-        # Theme build tools
-        - sassc
-        - inkscape
-        - optipng
-        # ImageMagick provides `convert`, which theming.sh requires to render
-        # the Abzu wallpapers and GDM artwork at build time. It used to be
-        # installed only best-effort inside the script layer (apt/dnf branch
-        # with `|| true`), so on runners where that path failed the whole
-        # wallpaper step silently no-op'd -- "no custom wallpapers" after a
-        # rebase despite theming.sh exiting 0. Ship it deterministically.
-        - ImageMagick
-        # gtk-update-icon-cache (gtk3-tools) and update-desktop-database
-        # (desktop-file-utils, below) are hard requirements of theming.sh's
-        # icon-registration step; without them the Abzu hicolor icons never
-        # land in the theme caches and custom app icons disappear from the
-        # dash/app grid.
+        # --- Optional GTK compatibility for flatpaks / GTK apps ---
         - gtk3
         - gtk-update-icon-cache
-
-        # Multimedia and audio
-        - ffmpeg-free
-        - libdiscid
-        - libchromaprint
-
-        # Disk and filesystem tools
-        - gdisk
-        - dosfstools
-        - ntfs-3g
-        - exfatprogs
-        - fuse3-devel
-
-        # Desktop / GNOME utilities
-        - desktop-file-utils
-        - dconf-editor
-        - gnome-tweaks
-        - gnome-extensions-app
-        - gnome-shell-extension-appindicator
-        # Dash to Dock: the macOS-style bottom dock referenced by the
-        # gschema/dconf settings. It must be SHIPPED, not just enabled in
-        # gsettings -- an enabled-but-missing extension UUID aborts
-        # gnome-shell's extension load pass, which also silently disabled
-        # Liquid Glass on the top bar (the "broken menu bar glass" report).
-        - gnome-shell-extension-dash-to-dock
-        - gnome-online-accounts
-        - evolution
-        - evolution-data-server
-        - gtk2-engines
         - gtk-murrine-engine
+        - gtk2-engines
+
+        # --- Retained Abzu-specific / utility packages ---
         - gdouros-akkadian-fonts
         - micro
         - starship
-
-        # Gaming and scheduler
         - gamemode
         - mangohud
         - scx-scheds
         - scx-tools
-
-        # Homelab / workstation
         - cockpit
         - cockpit-podman
-
-        # Security tools
         - usbguard
         - usbguard-notifier
         - policycoreutils-python-utils
-
-        # Windows compatibility
         - wine
         - winetricks
-
-        # Sumerian / Cuneiform tools
         - yagf
         - ibus
         - ibus-table
-
-        # R package compilation (sumer)
         - R
         - gsl-devel
         - gmp-devel
         - libsass-devel
         - v8-devel
-
-        # Wi-Fi firmware for Broadcom BCM4321/BCM4322 chips in older Intel
-        # Macs. Lives in RPM Fusion's tainted sub-repository, which is
-        # enabled by enable-rpmfusion.sh above.
         - b43-firmware
+        - mactel-boot
+        - rEFInd
+
+        # --- Image / asset tooling retained from original theming pipeline ---
+        - ImageMagick
+        - sassc
+        - inkscape
+        - optipng
 
   - type: kargs
     kargs:
@@ -205,12 +170,6 @@ modules:
       - slab_nomerge
       - random.trust_bootloader=off
       - random.trust_cpu=off
-      # NOTE: rd.shell=0 and rd.emergency=halt are intentionally NOT set.
-      # They make any dracut/boot transaction failure silently reboot the
-      # machine instead of dropping to an emergency shell, which turns a
-      # recoverable situation into a data-loss risk on machines that cannot
-      # easily attach a debug console (older Intel Macs). If you want them
-      # for a hardened fleet image, add them back deliberately per-machine.
 
   - type: files
     files:
@@ -218,84 +177,51 @@ modules:
         destination: /etc
       - source: system/var
         destination: /var
-        # usrlocal is handled by its own mapping to /usr/local below; do not
-        # duplicate it into /var/usrlocal in the image.
         exclude:
           - ./usrlocal
           - ./usrlocal/*
-      # CRITICAL: git cannot track an empty-looking path segment literally
-      # named "/usr", so the /usr/local subtree inside system/var is stored
-      # on disk as `system/var/usrlocal`. Copying it verbatim would land the
-      # Abzu helpers at /var/usrlocal/{bin,share} instead of /usr/local/...
-      # Map it explicitly to its true destination and drop it from the /var
-      # copy. (The tar tree BlueBuild builds for this module has no top-level
-      # "./" prefix, hence the "usrlocal/..." strip pattern.)
       - source: system/var/usrlocal
         destination: /usr/local
         toggle-ownership: false
       - source: system/usr/share
         destination: /usr/share
-      # CRITICAL: /usr/local is NOT under /usr/share. The packaged
-      # cuneiform-toggle launcher (/usr/local/bin/cuneiform-toggle) lived in
-      # this tree but was never copied into the image, because no mapping
-      # covered system/usr/local. Result: the desktop file + favorites entry
-      # existed, but Exec pointed at a non-existent binary -- the "no desktop
-      # cuneiform toggle app" report that survived every previous fix attempt
-      # (theming.sh regenerates the binary at build time, but each BlueBuild
-      # script runs in its own container layer, so files written by one script
-      # module are gone by the time the image commits; only the `files` module
-      # persists). NOTE: the helpers under system/var/usrlocal are mapped to
-      # /usr/local separately, above.
       - source: system/usr/local/bin
         destination: /usr/local/bin
       - source: etc/skel
         destination: /etc/skel
-      # Offline Broadcom b43 firmware pack for old Intel Macs (BCM4321/4322).
-      # Populated by files/scripts/install-mac-wifi-offline.sh on any
-      # internet-connected machine; consumed at install time by
-      # /usr/local/share/abzu/install-mac-wifi-offline.sh WITHOUT a network.
-      # This breaks the chicken-and-egg loop where rebasing to Abzu required
-      # Wi-Fi that only Abzu's image provides. See docs/MAC-INSTALL.md.
       - source: mac-wifi-pkgs
         destination: /usr/local/share/mac-wifi-pkgs
-      - source: etc/flatpak/overrides/ai.lmstudio.lm-studio
-        destination: /etc/flatpak/overrides/ai.lmstudio.lm-studio
 
-  # The Abzu GSettings defaults (themes, extensions, wallpapers, favorite
-  # apps, Console palette) ship as system-wide defaults in
-  # files/system/usr/share/glib-2.0/schemas/99-abzu-gnome.gschema.override,
-  # compiled by theming.sh at build time.
-  #
-  # A `- type: dconf` module used to force those same values into every
-  # existing user's dconf db at build time. It has been removed because
-  # BlueBuild's dconf module schema validator rejects several perfectly
-  # valid setting values (booleans such as `use-theme-colors: false`, and
-  # uri-typed string keys such as `picture-uri` fail the module's
-  # value-schema `anyOf` check), which aborts recipe validation and breaks
-  # the CI build. The published schema endpoint
-  # (https://schema.blue-build.org/modules/dconf-latest.json) currently
-  # serves HTML instead of JSON, so the CLI falls back to an internal
-  # schema whose value constraints do not match what the runtime module
-  # actually accepts. Until upstream validation is fixed, do not re-add
-  # dconf entries for these keys; put defaults in the gschema override
-  # file instead.
+      # GNUstep / WindowMaker session definition
+      - source: system/usr/share/xsessions
+        destination: /usr/share/xsessions
 
-  # Note: a2pi.service is intentionally NOT listed here. The systemd module
-  # runs before the script module, so at this point /usr/share/a2pi/a2pi.service
-  # does not yet exist. install-apple2pi.sh enables the service via symlinks
-  # after it installs the unit file.
+      # Retain Abzu hicolor icons (theme-agnostic)
+      - source: system/usr/share/icons/hicolor
+        destination: /usr/share/icons/hicolor
+
+      # Retain Plymouth boot theme (desktop-independent)
+      - source: system/usr/share/plymouth
+        destination: /usr/share/plymouth
+
+      # Retain Abzu-specific pixmaps used by branding / GDM replacement
+      - source: system/usr/share/pixmaps
+        destination: /usr/share/pixmaps
+
   - type: systemd
     system:
       enabled:
         - scx_loader.service
         - usbguard.service
         - cockpit.socket
-  - type: justfiles
-    validate: false
+        - lightdm.service
 
   - type: script
     scripts:
-      - theming.sh
+      # Build & install Gershwin (Eau theme, Menu.app) and GSDock
+      - setup-gnustep.sh
+
+      # Retained non-GNOME installers
       - install-intel-sde.sh
       - install-apple2pi.sh
       - install-tether.sh
@@ -304,27 +230,13 @@ modules:
       - install-fono.sh
       - install-icloud-linux.sh
       - install-cunai.sh
-      # AUDIT FIX: the chrony NTS drop-in in files/system/etc/chrony.conf.d/
-      # was inert because Fedora's chronyd only reads /etc/chrony.conf, and
-      # nothing ever added the required `include` directive. This script
-      # appends it (idempotently) so the NTS hardening actually applies.
       - configure-chrony-nts.sh
-      # Super Mario Bros. Remastered is no longer installed standalone; it is
-      # seeded into Quiver's starter library (install-quiver.sh). The former
-      # install-smb-remastered.sh script has been removed from files/scripts/.
       - install-beets.sh
       - install-zaparoo.sh
       - configure-stellarium.sh
       - install-sumer-r-package.sh
       - cuneiform-toggle.sh
       - enable-vaapi.sh
-      # Quiver Launcher replaces the former standalone installs of Daggerfall
-      # Unity (install-daggerfall-unity.sh), Ship of Harkinian (install-soh.sh),
-      # 2Ship2Harkinian (install-2s2h.sh) and the SA Mod Manager installer
-      # (install-samodmanager.sh). Those four scripts have been removed from
-      # files/scripts/. It also seeds Wave Race 64 via DomazinUS/RaceWave46 --
-      # the WR64 recomp with ray-traced water (DXR/RT64); Windows-only builds
-      # so far, run through Quiver's Wine/Proton wrapper.
       - install-quiver.sh
 
   - type: default-flatpaks
@@ -372,44 +284,21 @@ modules:
           - com.vysp3r.ProtonPlus
           - com.github.Matoking.protontricks
           - io.github.sharkwouter.Minigalaxy
-          # --- Flatpak releases kept on purpose -------------------------------
-          # These are Flathub (sandboxed, maintained) builds. Quiver Launcher
-          # is an AppImage that downloads arbitrary GitHub release assets and
-          # self-updates outside any sandbox, so it is NOT a security-equivalent
-          # replacement for the entries below. Keep them; see README notes in
-          # the commit that introduced Quiver.
-          #
-          # OpenMW: open-source Morrowind engine. Quiver has no catalog entry
-          # for it, and its data files come from GoG/Steam anyway (covered by
-          # Minigalaxy / Heroic / Steam).
           - org.openmw.OpenMW
-          # jorio bundle: free, open-source engine + official game data,
-          # shipped as verified Flathub packages with no equivalent upstream
-          # Linux installer that Quiver could manage.
           - com.infochunk.OpenMadoola
           - io.jor.nanosaur
           - io.jor.nanosaur2
-          # Hedge Mod Manager: the maintained successor to SA Mod Manager
-          # (the standalone SAModManager installer script was removed in
-          # favour of Quiver; HMM itself is not distributed as a GitHub
-          # release asset that Quiver can install/update, so keep the flatpak).
           - io.github.hedge_dev.hedgemodmanager
-          # Unreal Tournament / UT2004: Epic-published, proprietary wrappers
-          # around the Windows binaries run through Wine. There is NO native
-          # Linux build and therefore nothing for Quiver (which installs
-          # GitHub/GitLab release assets) to manage. The only non-flatpak
-          # alternatives are Lutris or Heroic scripts using the same Windows
-          # binaries -- strictly less safe than these Flathub packages.
           - com.epicgames.ut99
           - com.epicgames.ut2004
           - com.heroicgameslauncher.hgl
           - net.lutris.Lutris
           # Streaming
           - com.obsproject.Studio
-          # Vulkan layers for gaming
+          # Vulkan layers
           - org.freedesktop.Platform.VulkanLayer.MangoHud
           - org.freedesktop.Platform.VulkanLayer.gamescope
-          # Runtime layers
+          # Runtime
           - org.freedesktop.Platform
       - scope: user
 
