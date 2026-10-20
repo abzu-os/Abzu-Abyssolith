@@ -220,6 +220,7 @@ modules:
     scripts:
       # Build & install Gershwin (Eau theme, Menu.app) and GSDock
       - setup-gnustep.sh
+      - copy-assets.sh 
 
       # Retained non-GNOME installers
       - install-intel-sde.sh
