@@ -274,7 +274,6 @@ modules:
           - io.github.jeffshee.Hidamari
           - app.twintaillauncher.ttl
           - org.freedownloadmanager.Manager
-          - ai.lmstudio.lm-studio
           - com.github.tchx84.Flatseal
           - com.github.zocker_160.SyncThingy
           # Gaming
@@ -295,6 +294,7 @@ modules:
           - net.lutris.Lutris
           # Streaming
           - com.obsproject.Studio
+          - com.chatterino.chatterino
           # Vulkan layers
           - org.freedesktop.Platform.VulkanLayer.MangoHud
           - org.freedesktop.Platform.VulkanLayer.gamescope
