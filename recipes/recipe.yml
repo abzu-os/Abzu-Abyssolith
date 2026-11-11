@@ -136,6 +136,9 @@ modules:
         - b43-firmware
         - mactel-boot
         - rEFInd
+        - wmCalClock
+        - wmweather+
+        - feh
 
         # --- Image / asset tooling retained from original theming pipeline ---
         - ImageMagick
