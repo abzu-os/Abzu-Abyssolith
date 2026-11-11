@@ -284,7 +284,6 @@ modules:
           - com.steamgriddb.SGDBoop
           - com.vysp3r.ProtonPlus
           - com.github.Matoking.protontricks
-          - io.github.sharkwouter.Minigalaxy
           - org.openmw.OpenMW
           - com.infochunk.OpenMadoola
           - io.jor.nanosaur
