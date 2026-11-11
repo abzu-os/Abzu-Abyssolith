@@ -7,14 +7,17 @@ base-image: ghcr.io/ublue-os/base-main
 image-version: latest
 
 modules:
-  # Enable RPM Fusion before the dnf module for codecs and b43-firmware.
+  # Enable RPM Fusion and Sniffnet before the dnf module for codecs and b43-firmware.
   - type: script
     scripts:
       - enable-rpmfusion.sh
+      - install-sniffnet.sh
 
   - type: dnf
     repos:
       copr:
+        - name: "@lemonade-server/lemonade"
+          chroot: fedora-45-x86_64
         - name: bieszczaders/kernel-cachyos-addons
           chroot: fedora-45-x86_64
         - name: atim/starship
@@ -216,6 +219,7 @@ modules:
         - usbguard.service
         - cockpit.socket
         - lightdm.service
+        - lemond.service
 
   - type: script
     scripts:
