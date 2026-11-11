@@ -1,0 +1,14 @@
+      [Unit]
+         Description=Abzu rEFInd boot manager installation
+         ConditionPathExists=/sys/firmware/efi
+         ConditionPathExists=!/var/lib/abzu/refind-installed
+         After=local-fs.target
+         Before=lightdm.service
+      
+         [Service]
+         Type=oneshot
+        ExecStart=/usr/local/share/abzu/install-refind.sh
+         RemainAfterExit=yes
+      
+       [Install]
+       WantedBy=multi-user.target
