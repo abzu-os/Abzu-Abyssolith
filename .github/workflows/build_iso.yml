@@ -1,0 +1,62 @@
+name: Build ISO
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-iso:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install BlueBuild
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://blue-build.org/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Generate ISO
+        run: |
+          bluebuild generate-iso \
+            --output-dir ./iso-output \
+            ghcr.io/abzu-os/abzu:latest
+
+      - name: Report ISO size
+        run: |
+          ISO=$(find ./iso-output -name '*.iso' -type f | head -n1)
+          echo "ISO: $ISO"
+          ls -lh "$ISO"
+          SIZE_BYTES=$(stat -c%s "$ISO")
+          echo "ISO_SIZE_BYTES=$SIZE_BYTES" >> "$GITHUB_ENV"
+          if [ "$SIZE_BYTES" -gt 2000000000 ]; then
+            echo "ISO exceeds 2 GB — cannot be uploaded as a single GitHub Release asset."
+            echo "ISO_OVER_LIMIT=true" >> "$GITHUB_ENV"
+          else
+            echo "ISO_OVER_LIMIT=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Split ISO if over 2 GB
+        if: env.ISO_OVER_LIMIT == 'true'
+        run: |
+          ISO=$(find ./iso-output -name '*.iso' -type f | head -n1)
+          split -b 1900M --numeric-suffixes=1 --suffix-length=2 \
+            "$ISO" "${ISO}.part-"
+          ls -lh ./iso-output
+
+      - name: Upload ISO as artifact (under 2 GB only)
+        if: env.ISO_OVER_LIMIT == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: abzu-abyssolith-iso
+          path: ./iso-output/*.iso
+          retention-days: 7
+
+      - name: Upload ISO parts as artifact (over 2 GB)
+        if: env.ISO_OVER_LIMIT == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: abzu-abyssolith-iso-parts
+          path: ./iso-output/*.part-*
+          retention-days: 7
