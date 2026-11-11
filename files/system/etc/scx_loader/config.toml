@@ -1,15 +1,20 @@
 # /etc/scx_loader/config.toml
-# Configuration for scx_loader — manages sched-ext schedulers on Abzu
+# Default scheduler for Abzu Abyssolith
+default_sched = "scx_bpfland"
+default_mode = "Auto"
 
-[default]
-# The scheduler to load by default at boot
-sched = "scx_lavd"
+[scheds.scx_bpfland]
+# Auto mode: let scx_bpfland use its built-in heuristics.
+auto_mode = []
 
-# Mode for scx_lavd: "auto", "gaming", "lowlatency", or "powersave"
-# "gaming" sets -m performance for maximum gaming responsiveness
-mode = "gaming"
+# Gaming mode: prioritize interactive tasks and favor performance.
+gaming_mode = ["-m", "performance"]
 
-# Optional: additional raw flags passed to the scheduler
-# For scx_lavd gaming mode, the default flags are already optimized.
-# Uncomment and adjust only if you need custom tuning.
-# flags = []
+# Low-latency mode: tight time slices for desktop responsiveness.
+lowlatency_mode = ["-s", "5000", "-S", "500", "-l", "5000", "-m", "performance"]
+
+# Powersave mode: reduce power draw on laptops and idle servers.
+powersave_mode = ["-m", "powersave"]
+
+# Server mode: prioritize per-CPU tasks for throughput (e.g., parallel builds).
+server_mode = ["-p"]
