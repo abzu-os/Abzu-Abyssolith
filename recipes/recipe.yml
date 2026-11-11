@@ -17,11 +17,11 @@ modules:
     repos:
       copr:
         - name: "@lemonade-server/lemonade"
-          chroot: fedora-45-x86_64
+          chroot: fedora-%OS_VERSION%-x86_64
         - name: bieszczaders/kernel-cachyos-addons
-          chroot: fedora-45-x86_64
+          chroot: fedora-%OS_VERSION%-x86_64
         - name: atim/starship
-          chroot: fedora-45-x86_64
+          chroot: fedora-%OS_VERSION%-x86_64
     install:
       packages:
         # --- Core build toolchain (needed for Gershwin/GNUstep source builds) ---
