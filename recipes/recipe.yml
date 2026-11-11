@@ -16,9 +16,9 @@ modules:
     repos:
       copr:
         - name: bieszczaders/kernel-cachyos-addons
-          chroot: fedora-44-x86_64
+          chroot: fedora-45-x86_64
         - name: atim/starship
-          chroot: fedora-44-x86_64
+          chroot: fedora-45-x86_64
     install:
       packages:
         # --- Core build toolchain (needed for Gershwin/GNUstep source builds) ---
@@ -88,7 +88,6 @@ modules:
         - libcurl-devel
         - libarchive-devel
         - libdispatch-devel
-        - libgnome-desktop3-devel
         - libnotify-devel
         - dbus-devel
         - alsa-lib-devel
@@ -104,7 +103,6 @@ modules:
         - desktop-file-utils
         - shared-mime-info
         - hicolor-icon-theme
-        - adwaita-icon-theme
 
         # --- Optional GTK compatibility for flatpaks / GTK apps ---
         - gtk3
@@ -260,18 +258,14 @@ modules:
           - org.kde.krita
           - org.kde.haruna
           - org.stellarium.Stellarium
-          - org.gnome.Loupe
           # Productivity
           - io.github.diegopvlk.Dosage
           - org.gnuhealth.mygnuhealth
-          - org.gnome.clocks
-          - org.gnome.Weather
           - app.gmtp.gMTP
           - as.may.moat
           - io.github.heidefinnischen.cuneo
           # Utilities
           - io.github.kolunmi.Bazaar
-          - io.github.jeffshee.Hidamari
           - app.twintaillauncher.ttl
           - org.freedownloadmanager.Manager
           - com.github.tchx84.Flatseal
