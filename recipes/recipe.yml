@@ -155,7 +155,6 @@ modules:
       - mitigations=auto
       - threadirqs
       - init_on_alloc=1
-      - init_on_free=1
       - hash_pointers=always
       - page_alloc.shuffle=1
       - randomize_kstack_offset=on
@@ -165,13 +164,17 @@ modules:
       - iommu.strict=1
       - lockdown=confidentiality
       - module.sig_enforce=1
+      #Any future AKMODS support will need to be signed
       - l1d_flush=on
       - l1tf=full,force
       - spec_store_bypass_disable=on
       - spectre_v2=on
       - ssbd=force-on
-      - slab_debug=FZ
-      - slab_nomerge
+      # Optional runtime Hardening
+      #   sudo rpm-ostree kargs --append=slab_debug=FZ
+      #   sudo systemctl reboot
+      # slab_debug=FZ already implies slab_nomerge; add slab_nomerge alone only
+      # if you want cache isolation without the sanity-check overhead.
       - random.trust_bootloader=off
       - random.trust_cpu=off
 
@@ -187,6 +190,7 @@ modules:
       - source: system/var/usrlocal
         destination: /usr/local
         toggle-ownership: false
+        #Done to avoid permissions issues on/usr/local tree
       - source: system/usr/share
         destination: /usr/share
       - source: system/usr/local/bin
