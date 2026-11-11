@@ -137,8 +137,19 @@ modules:
         - libsass-devel
         - v8-devel
         - b43-firmware
+
+        # --- rEFInd boot manager (split subpackages) ---
+        # The metapackage "rEFInd" is intentionally NOT installed. Instead,
+        # the specific subpackages required by install-refind.sh are listed:
+        #   - rEFInd-tools: provides the refind-install script (64-bit path)
+        #   - rEFInd-unsigned-ia32: 32-bit EFI binary for older Macs
+        #   - rEFInd-unsigned-x64: 64-bit EFI binary for the refind-install path
+        #   - mactel-boot: provides hfs-bless for Mac blessing
         - mactel-boot
-        - rEFInd
+        - rEFInd-tools
+        - rEFInd-unsigned-ia32
+        - rEFInd-unsigned-x64
+
         - wmCalClock
         - wmweather+
         - feh
@@ -224,12 +235,19 @@ modules:
         - cockpit.socket
         - lightdm.service
         - lemond.service
+        # First-boot rEFInd installation. Unit file lives at
+        # files/system/etc/systemd/system/abzu-install-refind.service
+        # and is placed at /etc/systemd/system/ by the files module above.
+        # The script self-gates on /var/lib/abzu/refind-installed and on
+        # /sys/firmware/efi, so this is a no-op on non-EFI systems and on
+        # every boot after the first successful run.
+        - abzu-install-refind.service
 
   - type: script
     scripts:
       # Build & install Gershwin (Eau theme, Menu.app) and GSDock
       - setup-gnustep.sh
-      - copy-assets.sh 
+      - copy-assets.sh
 
       # Retained non-GNOME installers
       - install-intel-sde.sh
