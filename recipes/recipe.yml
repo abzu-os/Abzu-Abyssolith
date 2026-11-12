@@ -299,6 +299,7 @@ modules:
           - org.freedownloadmanager.Manager
           - com.github.tchx84.Flatseal
           - com.github.zocker_160.SyncThingy
+          - org.localsend.localsend_app
           # Gaming
           - com.valvesoftware.Steam
           - com.valvesoftware.Steam.CompatibilityTool.Proton
