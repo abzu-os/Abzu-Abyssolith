@@ -21,9 +21,14 @@ jobs:
           command -v bluebuild
           bluebuild --version
 
-      - name: Log in to GHCR as root
+      # Podman login (not docker login) so credentials land in the
+      # containers auth file that skopeo reads inside the ISO builder.
+      # docker login writes to /root/.docker/config.json, which skopeo
+      # does not use, producing the "unauthorized" failure at the
+      # final skopeo copy step.
+      - name: Log in to GHCR (Podman/Skopeo auth)
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | sudo docker login ghcr.io \
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io \
             -u ${{ github.actor }} --password-stdin
 
       - name: Generate ISO
