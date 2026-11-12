@@ -207,24 +207,9 @@ modules:
         destination: /usr/local/bin
       - source: etc/skel
         destination: /etc/skel
+      # Mac WiFi driver packages
       - source: mac-wifi-pkgs
         destination: /usr/local/share/mac-wifi-pkgs
-
-      # GNUstep / WindowMaker session definition
-      - source: system/usr/share/xsessions
-        destination: /usr/share/xsessions
-
-      # Retain Abzu hicolor icons (theme-agnostic)
-      - source: system/usr/share/icons/hicolor
-        destination: /usr/share/icons/hicolor
-
-      # Retain Plymouth boot theme (desktop-independent)
-      - source: system/usr/share/plymouth
-        destination: /usr/share/plymouth
-
-      # Retain Abzu-specific pixmaps used by branding / GDM replacement
-      - source: system/usr/share/pixmaps
-        destination: /usr/share/pixmaps
 
   - type: systemd
     system:
