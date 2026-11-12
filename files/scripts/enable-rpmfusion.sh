@@ -4,13 +4,11 @@ set -euo pipefail
 echo "--- Enabling RPM Fusion (free, nonfree, and nonfree-tainted) ---"
 
 # Install the base RPM Fusion release packages plus the nonfree-tainted
-# release package, which defines the rpmfusion-nonfree-tainted repository.
-# b43-firmware (Broadcom Wi-Fi firmware for older Macs) lives in nonfree-tainted,
-# not in the base nonfree repository.
+# release package. The tainted repository contains b43-firmware.
 dnf install -y \
-  "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm" \
-  "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm" \
-  "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-tainted-$(rpm -E %fedora).noarch.rpm"
+  "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm" \
+  "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm" \
+  "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-tainted-$(rpm -E %fedora).noarch.rpm"
 
 # DNF5 replaced `config-manager --enable` with `config-manager setopt`.
 dnf config-manager setopt rpmfusion-free.enabled=1
