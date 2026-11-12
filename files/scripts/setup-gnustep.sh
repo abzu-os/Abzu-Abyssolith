@@ -3,13 +3,15 @@ set -euo pipefail
 trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 
 # -----------------------------------------------------------------------------
-# Build & install Gershwin (Eau theme, Menu.app, System Preferences) and GSDock.
+# Build & install GNUstep GUI/back, then Gershwin (Eau theme, Menu.app, System
+# Preferences) and GSDock.
 #
-# Gershwin provides the Aqua-style "Liquid Glass" GNUstep theme engine
-# (gershwin-eau-theme) and the global menu bar (Menu.app).
-# GSDock provides the macOS-style bottom dock.
+# We drive Gershwin's own build system, whose `corelibs`
+# target builds libobjc2, gnustep-base, gnustep-gui and gnustep-back in the
+# correct order, then installs the Gershwin components on top.
 #
-# Both are built from source because neither is packaged for Fedora yet.
+# This keeps the recipe version-agnostic: nothing depends on Fedora continuing
+# to package GNUstep.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -18,23 +20,70 @@ export LOGNAME="${LOGNAME:-root}"
 export TERM="${TERM:-xterm-256color}"
 export XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 
+# Use clang/LLVM, which Gershwin and modern GNUstep expect.
+export CC="${CC:-/usr/bin/clang}"
+export CXX="${CXX:-/usr/bin/clang++}"
+export LD="${LD:-/usr/bin/ld.lld}"
+export LDFLAGS="${LDFLAGS:--fuse-ld=/usr/bin/ld.lld}"
+
 BUILD_ROOT="/tmp/abzu-gnustep-build"
 mkdir -p "${BUILD_ROOT}"
 cd "${BUILD_ROOT}"
 
-# --- 1. Build Gershwin (corelibs, windowmanager, systempreferences, Menu) ---
-echo "--- Building Gershwin ---"
+# --- 0. Pre-flight: verify build toolchain and required dev headers ---
+echo "--- Verifying GNUstep build prerequisites ---"
+
+require_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "ERROR: required command '$1' is not installed." >&2
+    echo "Add the corresponding package to the recipe's dnf list." >&2
+    exit 1
+  fi
+}
+
+require_cmd clang
+require_cmd clang++
+require_cmd cmake
+require_cmd make
+require_cmd pkg-config
+require_cmd git
+
+# X11 and Cairo are needed for the gnustep-back X11/Cairo backend.
+if ! pkg-config --exists x11; then
+  echo "ERROR: X11 development headers not found." >&2
+  echo "Add libX11-devel (and friends) to the recipe." >&2
+  exit 1
+fi
+if ! pkg-config --exists cairo; then
+  echo "ERROR: Cairo development headers not found." >&2
+  echo "Add cairo-devel to the recipe." >&2
+  exit 1
+fi
+if ! pkg-config --exists libart-2.0; then
+  echo "WARNING: libart_lgpl development headers not found." >&2
+  echo "The ART backend will be skipped; Cairo backend will still be built." >&2
+fi
+
+echo "Prerequisites satisfied."
+
+# --- 1. Build GNUstep core libraries (gui/back) via Gershwin's corelibs target ---
+echo "--- Building GNUstep GUI/back (via Gershwin corelibs) ---"
+
 git clone --depth 1 https://github.com/gershwin-desktop/gershwin-build.git
 cd gershwin-build
 
-# Gershwin expects GNUstep to be installed; Fedora packages are already present.
-# We only need to build the Gershwin components themselves.
+# Gershwin's bootstrap/checkout fetch the exact component revisions it needs.
 ./bootstrap.sh
 ./checkout.sh
+
+# `make corelibs` builds libobjc2, gnustep-base, gnustep-gui and gnustep-back
+# from source.  Without this, Gershwin cannot link against AppKit/Backend.
+make corelibs
+
+# Now install the Gershwin components (Eau theme, Menu.app, System Preferences).
 make install
 
-# The Gershwin install places its theme bundle and Menu.app under /usr/local.
-# Verify the Eau theme landed.
+# Sanity check: the Eau theme should now exist somewhere under /usr/local.
 if [ ! -d "/usr/local/share/GNUstep/Themes/Eau" ] && \
    [ ! -d "/usr/local/share/GNUstep/Library/Themes/Eau" ]; then
   echo "WARNING: Eau theme directory not found after Gershwin install." >&2
@@ -46,20 +95,18 @@ cd "${BUILD_ROOT}"
 
 # --- 2. Build GSDock (OS X-style dock) ---
 echo "--- Building GSDock ---"
-if git clone --depth 1 https://github.com/gnustep/GSDock.git 2>/dev/null; then
+if git clone --depth 1 https://github.com/gnustep/GSDock.git; then
   cd GSDock
-  # GSDock uses GNUstep-make
   make
   make install
   cd "${BUILD_ROOT}"
 else
   echo "WARNING: GSDock repository could not be cloned." >&2
-  echo "You may need to adjust the repository URL or install GSDock manually." >&2
+  echo "The dock will be omitted; the rest of the session is unaffected." >&2
 fi
 
 # --- 3. Session startup wrapper ---
-# The wrapper starts WindowMaker and any GNUstep daemons needed for the
-# Eau theme / Menu.app integration.
+# Starts WindowMaker and any GNUstep daemons needed for the Eau theme / Menu.app.
 cat > /usr/local/bin/abzu-windowmaker-session <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
