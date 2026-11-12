@@ -8,7 +8,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: read
 
     steps:
       - name: Checkout
@@ -21,29 +20,16 @@ jobs:
           command -v bluebuild
           bluebuild --version
 
-      # Write the GHCR credentials to a fixed, root-readable path so that
-      # the build-container-installer container can find them. The default
-      # sudo podman login writes to /run/containers/0/auth.json, which is
-      # a per-session path that the builder container cannot see.
-      - name: Log in to GHCR (explicit auth file)
+      # Build the image locally from recipe.yml and generate the ISO from it.
+      # This avoids pulling the private GHCR image inside the builder container,
+      # which is the step that consistently fails with "unauthorized" despite
+      # host-level logins and REGISTRY_AUTH_FILE.
+      - name: Generate ISO from recipe
         run: |
-          AUTHFILE="/etc/containers/auth.json"
-          sudo mkdir -p "$(dirname "$AUTHFILE")"
-          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login \
-            --authfile "$AUTHFILE" ghcr.io \
-            -u ${{ github.actor }} --password-stdin
-          sudo chmod 644 "$AUTHFILE"
-          sudo ls -l "$AUTHFILE"
-          echo "REGISTRY_AUTH_FILE=$AUTHFILE" >> "$GITHUB_ENV"
-
-      - name: Generate ISO
-        env:
-          REGISTRY_AUTH_FILE: ${{ env.REGISTRY_AUTH_FILE }}
-        run: |
-          sudo --preserve-env=REGISTRY_AUTH_FILE bluebuild generate-iso \
+          sudo bluebuild generate-iso \
             --iso-name abzu-abyssolith.iso \
             --output-dir ./iso-output \
-            image ghcr.io/abzu-os/abzu:latest
+            recipe recipes/recipe.yml
 
       - name: Report ISO size
         run: |
