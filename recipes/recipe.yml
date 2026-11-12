@@ -31,6 +31,7 @@ modules:
         - gcc-objc
         - clang
         - llvm
+        - lld
         - make
         - cmake
         - ninja-build
@@ -46,16 +47,15 @@ modules:
         - xz
         - file
 
-        # --- GNUstep runtime & libraries ---
+        # --- GNUstep base libraries ---
         - libobjc2
         - libobjc2-devel
         - gnustep-make
         - gnustep-base
         - gnustep-base-devel
-        - gnustep-gui
-        - gnustep-gui-devel
-        - gnustep-back
-        - gnustep-back-devel
+        # NOTE: gnustep-gui and gnustep-back are NOT shipped in Fedora 45.
+        # They are built from source by setup-gnustep.sh (via Gershwin's
+        # `make corelibs` target).  Do not add them here.
 
         # --- WindowMaker (the GNUstep window manager) ---
         - WindowMaker
@@ -71,6 +71,8 @@ modules:
         - libXinerama-devel
         - libXrandr-devel
         - libXcursor-devel
+        - libXt-devel
+        - libXmu-devel
         - libpng-devel
         - libjpeg-turbo-devel
         - libtiff-devel
@@ -79,6 +81,8 @@ modules:
         - harfbuzz-devel
         - fribidi-devel
         - librsvg2-devel
+        - cairo-devel
+        - libart_lgpl-devel
 
         # --- GNUstep/Gershwin build dependencies ---
         - libxml2-devel
@@ -138,12 +142,6 @@ modules:
         - b43-firmware
 
         # --- rEFInd boot manager (split subpackages) ---
-        # The metapackage "rEFInd" is intentionally NOT installed. Instead,
-        # the specific subpackages required by install-refind.sh are listed:
-        #   - rEFInd-tools: provides the refind-install script (64-bit path)
-        #   - rEFInd-unsigned-ia32: 32-bit EFI binary for older Macs
-        #   - rEFInd-unsigned-x64: 64-bit EFI binary for the refind-install path
-        #   - mactel-boot: provides hfs-bless for Mac blessing
         - mactel-boot
         - rEFInd-tools
         - rEFInd-unsigned-ia32
@@ -158,6 +156,13 @@ modules:
         - sassc
         - inkscape
         - optipng
+
+        # --- Dependencies for helper scripts ---
+        - fuse3-devel   # Required by install-apple2pi.sh
+        - pipx          # Required by install-beets.sh
+        - rust          # Provides cargo, required by install-snow.sh
+        - nodejs        # Required by install-hotline.sh
+        - npm           # Required by install-hotline.sh
 
   - type: kargs
     kargs:
@@ -229,7 +234,9 @@ modules:
 
   - type: script
     scripts:
-      # Build & install Gershwin (Eau theme, Menu.app) and GSDock
+      # Build & install GNUstep GUI/back, Gershwin (Eau theme, Menu.app)
+      # and GSDock.  Fedora 45 does not package gnustep-gui/back, so they are
+      # built from source here.
       - setup-gnustep.sh
       - copy-assets.sh
 
