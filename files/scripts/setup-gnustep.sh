@@ -27,9 +27,11 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # build, then build GSspell separately after the library is installed.
 # The separate build is done in the *original* libs-gui tree (not a fresh
 # clone) so that the generated gui.make and config.make are already present
-# in the parent directory.  The GNUstep makefile environment must be sourced
-# with nounset temporarily disabled because GNUstep.sh references $ZSH_VERSION
-# without a default.
+# in the parent directory.  The Tools build directory is added to PATH so
+# that make_services (built earlier in the same Tools build) is found when
+# creating the Info-gnustep.plist for GSspell.  The GNUstep makefile
+# environment must be sourced with nounset temporarily disabled because
+# GNUstep.sh references $ZSH_VERSION without a default.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -220,6 +222,9 @@ else
 fi
 # Set LD_LIBRARY_PATH to the install prefix so the newly installed library is found.
 export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
+# Add the Tools build directory to PATH so that make_services (built earlier
+# in this same Tools build) is found when creating Info-gnustep.plist for GSspell.
+export PATH="${BUILD_ROOT}/libs-gui/Tools:${PATH}"
 make -j"$(nproc)"
 make install
 cd "${BUILD_ROOT}"
