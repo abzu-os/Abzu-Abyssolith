@@ -16,7 +16,7 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 #
 # The GSspell service fails to build during the main gnustep-gui build because
 # make_services cannot locate the freshly compiled libgnustep-gui. The
-# documented workaround is to disable the Tools subdirectory for the main
+# documented workaround is to exclude the Tools subdirectory from the main
 # build, then build GSspell separately after the library is installed.
 # -----------------------------------------------------------------------------
 
@@ -48,7 +48,7 @@ pkg-config --exists x11 || { echo "ERROR: X11 headers missing."; exit 1; }
 pkg-config --exists cairo || { echo "ERROR: Cairo headers missing."; exit 1; }
 echo "Prerequisites satisfied."
 
-# --- 1. Build GNUstep GUI and back (without Tools) -----------------------
+# --- 1. Build GNUstep GUI (library only) ---------------------------------
 echo "--- Building gnustep-gui (library only) ---"
 git clone --depth 1 https://github.com/gnustep/libs-gui.git
 cd libs-gui
@@ -66,9 +66,11 @@ sed -i -E \
 sed -i -E 's/GS_END_FOR\([^)]*\)/}/g' Source/GSTheme.m
 echo "Patched GSTheme.m fast-enumeration macros."
 
-# Disable the Tools subdirectory so GSspell is not built during the main build.
-sed -i 's/^SUBPROJECTS = .*/SUBPROJECTS = Source Images Sounds Model Panels PrinterTypes TextConverters ColorPickers KeyBindings Resources Printing Themes Tests/' GNUmakefile
-echo "Disabled Tools subdirectory in libs-gui GNUmakefile."
+# Remove the Tools entry from the SUBPROJECTS list without corrupting the
+# multi-line backslash syntax. The Tools directory contains GSspell, which
+# fails during the main build due to a make_services library path issue.
+sed -i '/^Tools \\$/d' GNUmakefile
+echo "Removed Tools from SUBPROJECTS in libs-gui GNUmakefile."
 
 GUI_OBJCFLAGS="-Wno-error=format-security -Wno-error=incompatible-pointer-types"
 ./configure --prefix=/usr/local
@@ -91,7 +93,7 @@ cd "${BUILD_ROOT}"
 echo "--- Building GSspell separately ---"
 git clone --depth 1 https://github.com/gnustep/libs-gui.git libs-gui-spell
 cd libs-gui-spell
-# Only build the Tools subdirectory.
+# Only build the Tools subdirectory (which provides GSspell).
 cd Tools
 # Set LD_LIBRARY_PATH to the install prefix so the newly installed library is found.
 export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
