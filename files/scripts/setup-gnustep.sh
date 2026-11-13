@@ -26,7 +26,9 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # documented workaround is to exclude the Tools subdirectory from the main
 # build, then build GSspell separately after the library is installed.
 # The separate build requires the GNUstep makefile environment (GNUSTEP_MAKEFILES)
-# to be sourced; otherwise make cannot find common.make.
+# to be set; otherwise make cannot find common.make.  On Fedora the makefiles
+# live in /usr/lib64/GNUstep/Makefiles (installed by the gnustep-make RPM),
+# not under /usr/local.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -95,8 +97,6 @@ cd libs-back
 # The Python script below balances parentheses and handles multi-line
 # invocations and pointer types (e.g. "NSWindow *").
 python3 - <<'PYEOF'
-import re
-
 path = "Source/x11/XGServerEvent.m"
 with open(path, 'r') as f:
     text = f.read()
@@ -188,9 +188,29 @@ cd libs-gui-spell
 # Only build the Tools subdirectory (which provides GSspell).
 cd Tools
 # Source the GNUstep makefile environment so that GNUSTEP_MAKEFILES is set
-# and common.make can be found. Without this, make looks for /common.make.
-# shellcheck source=/dev/null
-. /usr/local/share/GNUstep/Makefiles/GNUstep.sh
+# and common.make can be found. On Fedora the makefiles live under
+# /usr/lib64/GNUstep/Makefiles (installed by the gnustep-make RPM); on other
+# setups they may live under /usr/local/share. Try each known location,
+# and fall back to exporting GNUSTEP_MAKEFILES directly.
+GNUSTEP_SH=""
+for candidate in \
+  /usr/lib64/GNUstep/Makefiles/GNUstep.sh \
+  /usr/local/share/GNUstep/Makefiles/GNUstep.sh \
+  /usr/share/GNUstep/Makefiles/GNUstep.sh \
+  /usr/local/lib64/GNUstep/Makefiles/GNUstep.sh ; do
+  if [ -f "${candidate}" ]; then
+    GNUSTEP_SH="${candidate}"
+    break
+  fi
+done
+if [ -n "${GNUSTEP_SH}" ]; then
+  echo "Sourcing GNUstep environment from ${GNUSTEP_SH}"
+  # shellcheck source=/dev/null
+  . "${GNUSTEP_SH}"
+else
+  echo "WARNING: GNUstep.sh not found; exporting GNUSTEP_MAKEFILES directly." >&2
+  export GNUSTEP_MAKEFILES=/usr/lib64/GNUstep/Makefiles
+fi
 # Set LD_LIBRARY_PATH to the install prefix so the newly installed library is found.
 export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
 make -j"$(nproc)"
