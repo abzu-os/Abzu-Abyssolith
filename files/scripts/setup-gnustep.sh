@@ -6,12 +6,10 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # Build and install GNUstep GUI/back from source, then the Gershwin
 # components (Eau theme, Menu.app) and GSDock.
 #
-# Fedora 45 does not package gnustep-gui or gnustep-back. Gershwin's own
-# bootstrap script expects a per-distribution requirements file (fedora.txt)
-# that is not provided upstream. To keep the build version-agnostic and
-# independent of Gershwin's OS-specific tooling, we build the GNUstep
-# libraries directly from their upstream repositories, then build the
-# Gershwin pieces we need.
+# Fedora 45 does not package gnustep-gui or gnustep-back. This script builds
+# them directly from upstream source. Fedora's hardening flags include
+# -Werror=format-security, which GNUstep's NSApplication.m triggers. We add a
+# GNUmakefile.preamble to disable that specific error without patching source.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -64,7 +62,15 @@ echo "--- Building gnustep-gui from source ---"
 git clone --depth 1 https://github.com/gnustep/libs-gui.git
 cd libs-gui
 
-# The standard GNUstep build sequence.
+# Disable -Werror=format-security for this source tree.
+# GNUstep's NSApplication.m uses a non-literal format string, which
+# Fedora's default hardening flags turn into a fatal error. This is a
+# known upstream incompatibility, not a local defect.
+cat > GNUmakefile.preamble <<'EOF'
+ADDITIONAL_OBJCFLAGS += -Wno-error=format-security
+ADDITIONAL_CFLAGS += -Wno-error=format-security
+EOF
+
 ./configure --prefix=/usr/local
 make -j"$(nproc)"
 make install
@@ -75,6 +81,14 @@ echo "--- Building gnustep-back from source ---"
 
 git clone --depth 1 https://github.com/gnustep/libs-back.git
 cd libs-back
+
+# Apply the same format-security override here as a precaution. The
+# libs-back source does not currently trigger the error, but it uses the
+# same compiler flags and may do so in a future revision.
+cat > GNUmakefile.preamble <<'EOF'
+ADDITIONAL_OBJCFLAGS += -Wno-error=format-security
+ADDITIONAL_CFLAGS += -Wno-error=format-security
+EOF
 
 ./configure --prefix=/usr/local
 make -j"$(nproc)"
@@ -88,14 +102,9 @@ echo "--- Building Gershwin components (Eau theme, Menu.app) ---"
 git clone --depth 1 https://github.com/gershwin-desktop/gershwin-developer.git /Developer
 cd /Developer
 
-# The core GNUstep libraries are already installed above, so we only build
-# the Gershwin-specific components. The `make` targets listed in the
-# documentation (corelibs, workspace, windowmanager, components, etc.) are
-# available here. We build the theme and the menu server.
 make eau-theme
 make menu
 
-# Install the Gershwin components.
 make install
 
 cd "${BUILD_ROOT}"
