@@ -11,9 +11,9 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # target builds libobjc2, gnustep-base, gnustep-gui and gnustep-back in the
 # correct order, then installs the Gershwin components on top.
 #
-# The upstream repository has been renamed from `gershwin-build` to
-# `gershwin-developer`. The bootstrap and checkout scripts now live inside
-# `Library/Scripts/` within that tree.
+# The upstream repository is `gershwin-developer`, and it expects to be checked
+# out at /Developer. The bootstrap and checkout scripts live in
+# /Developer/Library/Scripts/.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -71,21 +71,20 @@ echo "Prerequisites satisfied."
 # --- 1. Build GNUstep core libraries (gui/back) via Gershwin's corelibs target ---
 echo "--- Building GNUstep GUI/back (via Gershwin corelibs) ---"
 
-# The upstream repository is now gershwin-developer, and it expects to be
-# checked out at /Developer.
+# The upstream repository is gershwin-developer, checked out at /Developer.
 git clone --depth 1 https://github.com/gershwin-desktop/gershwin-developer.git /Developer
 
 cd /Developer
 
-# Bootstrap and checkout now live inside Library/Scripts/.
-/Library/Scripts/bootstrap.sh
-/Library/Scripts/checkout.sh
+# Bootstrap and checkout live in /Developer/Library/Scripts/.
+/Developer/Library/Scripts/bootstrap.sh
+/Developer/Library/Scripts/checkout.sh
 
 # `make corelibs` builds libobjc2, gnustep-base, gnustep-gui and gnustep-back
-# from source. Without this, Gershwin cannot link against AppKit/Backend.
+# from source.
 make corelibs
 
-# Now install the Gershwin components (Eau theme, Menu.app, System Preferences).
+# Install the Gershwin components (Eau theme, Menu.app, System Preferences).
 make install
 
 # Sanity check: the Eau theme should now exist somewhere under /usr/local.
