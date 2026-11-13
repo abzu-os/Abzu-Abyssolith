@@ -6,12 +6,14 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # Build & install GNUstep GUI/back, then Gershwin (Eau theme, Menu.app, System
 # Preferences) and GSDock.
 #
-# We drive Gershwin's own build system, whose `corelibs`
+# Fedora 45 does NOT ship gnustep-gui or gnustep-back. They are therefore built
+# from source here by driving Gershwin's own build system, whose `corelibs`
 # target builds libobjc2, gnustep-base, gnustep-gui and gnustep-back in the
 # correct order, then installs the Gershwin components on top.
 #
-# This keeps the recipe version-agnostic: nothing depends on Fedora continuing
-# to package GNUstep.
+# The upstream repository has been renamed from `gershwin-build` to
+# `gershwin-developer`. The bootstrap and checkout scripts now live inside
+# `Library/Scripts/` within that tree.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -69,15 +71,18 @@ echo "Prerequisites satisfied."
 # --- 1. Build GNUstep core libraries (gui/back) via Gershwin's corelibs target ---
 echo "--- Building GNUstep GUI/back (via Gershwin corelibs) ---"
 
-git clone --depth 1 https://github.com/gershwin-desktop/gershwin-build.git
-cd gershwin-build
+# The upstream repository is now gershwin-developer, and it expects to be
+# checked out at /Developer.
+git clone --depth 1 https://github.com/gershwin-desktop/gershwin-developer.git /Developer
 
-# Gershwin's bootstrap/checkout fetch the exact component revisions it needs.
-./bootstrap.sh
-./checkout.sh
+cd /Developer
+
+# Bootstrap and checkout now live inside Library/Scripts/.
+/Library/Scripts/bootstrap.sh
+/Library/Scripts/checkout.sh
 
 # `make corelibs` builds libobjc2, gnustep-base, gnustep-gui and gnustep-back
-# from source.  Without this, Gershwin cannot link against AppKit/Backend.
+# from source. Without this, Gershwin cannot link against AppKit/Backend.
 make corelibs
 
 # Now install the Gershwin components (Eau theme, Menu.app, System Preferences).
