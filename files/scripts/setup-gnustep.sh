@@ -25,11 +25,11 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # make_services cannot locate the freshly compiled libgnustep-gui. The
 # documented workaround is to exclude the Tools subdirectory from the main
 # build, then build GSspell separately after the library is installed.
-# The separate build requires the GNUstep makefile environment (GNUSTEP_MAKEFILES)
-# to be set; otherwise make cannot find common.make.  On Fedora the makefiles
-# live in /usr/lib64/GNUstep/Makefiles (installed by the gnustep-make RPM),
-# not under /usr/local.  Because GNUstep.sh references $ZSH_VERSION without
-# a default, it must be sourced with nounset (set -u) temporarily disabled.
+# The separate build is done in the *original* libs-gui tree (not a fresh
+# clone) so that the generated gui.make and config.make are already present
+# in the parent directory.  The GNUstep makefile environment must be sourced
+# with nounset temporarily disabled because GNUstep.sh references $ZSH_VERSION
+# without a default.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -80,6 +80,7 @@ echo "Patched GSTheme.m fast-enumeration macros."
 # Remove the Tools entry from the SUBPROJECTS list without corrupting the
 # multi-line backslash syntax. The Tools directory contains GSspell, which
 # fails during the main build due to a make_services library path issue.
+# We will build it separately in Step 3 using this same tree.
 sed -i '/^Tools \\$/d' GNUmakefile
 echo "Removed Tools from SUBPROJECTS in libs-gui GNUmakefile."
 
@@ -184,10 +185,11 @@ cd "${BUILD_ROOT}"
 
 # --- 3. Build GSspell separately ---------------------------------------------
 echo "--- Building GSspell separately ---"
-git clone --depth 1 https://github.com/gnustep/libs-gui.git libs-gui-spell
-cd libs-gui-spell
-# Only build the Tools subdirectory (which provides GSspell).
-cd Tools
+# Use the original libs-gui tree, which already contains the generated
+# gui.make and config.make in its root directory.  The Tools subdirectory
+# was removed from SUBPROJECTS but is still present on disk and can be
+# built directly.
+cd "${BUILD_ROOT}/libs-gui/Tools"
 # Source the GNUstep makefile environment so that GNUSTEP_MAKEFILES is set
 # and common.make can be found. On Fedora the makefiles live under
 # /usr/lib64/GNUstep/Makefiles (installed by the gnustep-make RPM); on other
