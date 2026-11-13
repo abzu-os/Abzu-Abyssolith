@@ -18,6 +18,11 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # defined in GSFastEnumeration.h. That header is no longer shipped at the
 # expected path in libs-base. Rather than depending on it, we patch GSTheme.m
 # to use standard fast-enumeration loops instead.
+#
+# The GSspell service fails to build because make_services cannot load the
+# newly compiled libgnustep-gui library in this environment. This is a known
+# issue; skipping the Tools/GSspell service allows the rest of gnustep-gui
+# to install successfully.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -83,17 +88,26 @@ fi
 
 # Patch GSTheme.m to replace GS_FOR_IN / GS_END_FOR macros with standard loops.
 if grep -q 'GS_FOR_IN' Source/GSTheme.m; then
-  # Replace GS_FOR_IN(type, var, collection) with for (type var in collection) {
   sed -i -E \
     's/GS_FOR_IN\(([^,]+),\s*([^,]+),\s*([^)]+)\)/for (\1 \2 in \3) {/g' \
     Source/GSTheme.m
-  # Replace GS_END_FOR(collection) with }
   sed -i -E \
     's/GS_END_FOR\([^)]*\)/}/g' \
     Source/GSTheme.m
   echo "Patched GSTheme.m fast-enumeration macros."
 else
   echo "GS_FOR_IN not found in GSTheme.m; no patch needed." >&2
+fi
+
+# Skip building the GSspell service, which fails because make_services
+# cannot load libgnustep-gui in this environment. The rest of gnustep-gui
+# builds and installs correctly without it.
+if [ -f Tools/GNUmakefile ]; then
+  # Comment out the GSspell service definition so it is not built.
+  sed -i 's/^\(SERVICE_NAME = GSspell\)/# \1/' Tools/GNUmakefile
+  echo "Patched Tools/GNUmakefile to skip GSspell service."
+else
+  echo "WARNING: Tools/GNUmakefile not found; GSspell may still be built." >&2
 fi
 
 GUI_OBJCFLAGS="-Wno-error=format-security -Wno-error=incompatible-pointer-types"
