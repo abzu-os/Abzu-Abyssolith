@@ -28,7 +28,8 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # The separate build requires the GNUstep makefile environment (GNUSTEP_MAKEFILES)
 # to be set; otherwise make cannot find common.make.  On Fedora the makefiles
 # live in /usr/lib64/GNUstep/Makefiles (installed by the gnustep-make RPM),
-# not under /usr/local.
+# not under /usr/local.  Because GNUstep.sh references $ZSH_VERSION without
+# a default, it must be sourced with nounset (set -u) temporarily disabled.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -205,8 +206,12 @@ for candidate in \
 done
 if [ -n "${GNUSTEP_SH}" ]; then
   echo "Sourcing GNUstep environment from ${GNUSTEP_SH}"
+  # GNUstep.sh references $ZSH_VERSION and other optional variables without
+  # defaults, so it cannot be sourced while nounset (set -u) is active.
+  set +u
   # shellcheck source=/dev/null
   . "${GNUSTEP_SH}"
+  set -u
 else
   echo "WARNING: GNUstep.sh not found; exporting GNUSTEP_MAKEFILES directly." >&2
   export GNUSTEP_MAKEFILES=/usr/lib64/GNUstep/Makefiles
