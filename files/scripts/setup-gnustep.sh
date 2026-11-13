@@ -19,10 +19,14 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # expected path in libs-base. Rather than depending on it, we patch GSTheme.m
 # to use standard fast-enumeration loops instead.
 #
-# The GSspell service registration fails because the dynamic linker cannot
-# find the freshly built libgnustep-gui.so during the after-install step.
-# Setting LD_LIBRARY_PATH to include the install prefix (/usr/local/lib64)
-# before make install resolves this.
+# The GSspell service registration fails during make install because the
+# after-install step cannot locate the GSspell executable or its newly built
+# library. The GNUstep community documents the workaround: explicitly pass
+# LD_LIBRARY_PATH and PATH to make install so the dynamic linker and the
+# postamble can find the binary. We wrap make install in an env call to
+# apply this fix. Aspell (aspell and aspell-devel) must be installed for
+# GSspell to provide real spell-checking; otherwise only a dummy backend is
+# built.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -106,7 +110,13 @@ GUI_OBJCFLAGS="-Wno-error=format-security -Wno-error=incompatible-pointer-types"
 
 ./configure --prefix=/usr/local
 make -j"$(nproc)" OBJCFLAGS="${GUI_OBJCFLAGS}"
-make install
+
+# Pass LD_LIBRARY_PATH and PATH explicitly to make install so that the
+# GSspell service registration step can find the freshly built library and
+# binary. This is the documented GNUstep workaround for the install failure.
+env LD_LIBRARY_PATH="${LD_LIBRARY_PATH}" \
+    PATH="/usr/local/bin:/usr/bin:/bin:${PATH:-}" \
+    make install
 
 cd "${BUILD_ROOT}"
 
