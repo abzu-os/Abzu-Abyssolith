@@ -17,7 +17,9 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # Both GSTheme.m (in libs-gui) and XGServerEvent.m (in libs-back) use the
 # GS_FOR_IN / GS_END_FOR macros, which are defined in GSFastEnumeration.h.
 # That header is not on the include path during these builds. We patch both
-# files to use standard fast-enumeration loops instead.
+# files to use standard fast-enumeration loops instead.  The patch for
+# XGServerEvent.m uses a small Python script because the macro invocations
+# span multiple lines and contain pointer types.
 #
 # The GSspell service fails to build during the main gnustep-gui build because
 # make_services cannot locate the freshly compiled libgnustep-gui. The
@@ -47,7 +49,7 @@ require_cmd() {
     exit 1
   fi
 }
-require_cmd clang clang++ cmake make pkg-config git
+require_cmd clang clang++ cmake make pkg-config git python3
 pkg-config --exists x11 || { echo "ERROR: X11 headers missing."; exit 1; }
 pkg-config --exists cairo || { echo "ERROR: Cairo headers missing."; exit 1; }
 echo "Prerequisites satisfied."
@@ -88,11 +90,88 @@ git clone --depth 1 https://github.com/gnustep/libs-back.git
 cd libs-back
 
 # Patch XGServerEvent.m to replace GS_FOR_IN / GS_END_FOR macros.
-sed -i -E \
-  's/GS_FOR_IN\(([^,]+),\s*([^,]+),\s*([^)]+)\)/for (\1 \2 in \3) {/g' \
-  Source/x11/XGServerEvent.m
-sed -i -E 's/GS_END_FOR\([^)]*\)/}/g' Source/x11/XGServerEvent.m
-echo "Patched XGServerEvent.m fast-enumeration macros."
+# The Python script below balances parentheses and handles multi-line
+# invocations and pointer types (e.g. "NSWindow *").
+python3 - <<'PYEOF'
+import re
+
+path = "Source/x11/XGServerEvent.m"
+with open(path, 'r') as f:
+    text = f.read()
+
+def find_matching_paren(s, start):
+    depth = 0
+    i = start
+    while i < len(s):
+        ch = s[i]
+        if ch == '(':
+            depth += 1
+        elif ch == ')':
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return -1
+
+# Replace GS_FOR_IN( type, var, collection ) { ... } with a standard
+# fast-enumeration loop.  The macro body is everything up to the matching
+# GS_END_FOR.
+out = []
+i = 0
+while i < len(text):
+    if text.startswith("GS_FOR_IN", i):
+        paren_start = text.find('(', i)
+        if paren_start == -1:
+            out.append(text[i:])
+            break
+        paren_end = find_matching_paren(text, paren_start)
+        if paren_end == -1:
+            out.append(text[i:])
+            break
+        args = text[paren_start + 1: paren_end]
+        # Split arguments at the top level (ignoring nested parentheses).
+        parts = []
+        depth = 0
+        current = []
+        for ch in args:
+            if ch == '(':
+                depth += 1
+            elif ch == ')':
+                depth -= 1
+            if ch == ',' and depth == 0:
+                parts.append(''.join(current).strip())
+                current = []
+            else:
+                current.append(ch)
+        if current:
+            parts.append(''.join(current).strip())
+        if len(parts) == 3:
+            typ, var, coll = parts
+            out.append(f"for ({typ} {var} in {coll}) {{")
+        else:
+            # Fallback: leave as-is if the shape is unexpected.
+            out.append(text[i: paren_end + 1])
+        i = paren_end + 1
+    elif text.startswith("GS_END_FOR", i):
+        # Consume GS_END_FOR(...) and emit a closing brace.
+        paren_start = text.find('(', i)
+        if paren_start != -1:
+            paren_end = find_matching_paren(text, paren_start)
+            if paren_end != -1:
+                i = paren_end + 1
+                out.append('}')
+                continue
+        out.append(text[i])
+        i += 1
+    else:
+        out.append(text[i])
+        i += 1
+
+text = ''.join(out)
+with open(path, 'w') as f:
+    f.write(text)
+print("Patched XGServerEvent.m fast-enumeration macros.")
+PYEOF
 
 BACK_OBJCFLAGS="-Wno-error=format-security -Wno-error=incompatible-pointer-types"
 ./configure --prefix=/usr/local
