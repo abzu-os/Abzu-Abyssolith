@@ -25,6 +25,8 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # make_services cannot locate the freshly compiled libgnustep-gui. The
 # documented workaround is to exclude the Tools subdirectory from the main
 # build, then build GSspell separately after the library is installed.
+# The separate build requires the GNUstep makefile environment (GNUSTEP_MAKEFILES)
+# to be sourced; otherwise make cannot find common.make.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -185,6 +187,10 @@ git clone --depth 1 https://github.com/gnustep/libs-gui.git libs-gui-spell
 cd libs-gui-spell
 # Only build the Tools subdirectory (which provides GSspell).
 cd Tools
+# Source the GNUstep makefile environment so that GNUSTEP_MAKEFILES is set
+# and common.make can be found. Without this, make looks for /common.make.
+# shellcheck source=/dev/null
+. /usr/local/share/GNUstep/Makefiles/GNUstep.sh
 # Set LD_LIBRARY_PATH to the install prefix so the newly installed library is found.
 export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
 make -j"$(nproc)"
