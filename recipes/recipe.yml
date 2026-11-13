@@ -54,8 +54,11 @@ modules:
         - gnustep-base
         - gnustep-base-devel
         # NOTE: gnustep-gui and gnustep-back are NOT shipped in Fedora 45.
-        # They are built from source by setup-gnustep.sh (via Gershwin's
-        # `make corelibs` target).  Do not add them here.
+        # They are built from source by setup-gnustep.sh.
+
+        # --- Aspell (required for GSspell.service) ---
+        - aspell
+        - aspell-devel
 
         # --- WindowMaker (the GNUstep window manager) ---
         - WindowMaker
