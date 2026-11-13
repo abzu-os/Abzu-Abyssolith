@@ -19,10 +19,10 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # expected path in libs-base. Rather than depending on it, we patch GSTheme.m
 # to use standard fast-enumeration loops instead.
 #
-# The GSspell service fails to build because make_services cannot load the
-# newly compiled libgnustep-gui library in this environment. This is a known
-# issue; skipping the Tools/GSspell service allows the rest of gnustep-gui
-# to install successfully.
+# The GSspell service registration fails because the dynamic linker cannot
+# find the freshly built libgnustep-gui.so during the after-install step.
+# Setting LD_LIBRARY_PATH to include the install prefix (/usr/local/lib64)
+# before make install resolves this.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -35,6 +35,9 @@ export CC="${CC:-/usr/bin/clang}"
 export CXX="${CXX:-/usr/bin/clang++}"
 export LD="${LD:-/usr/bin/ld.lld}"
 export LDFLAGS="${LDFLAGS:--fuse-ld=/usr/bin/ld.lld}"
+
+# Ensure the freshly built libraries are discoverable during install.
+export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
 
 BUILD_ROOT="/tmp/abzu-gnustep-build"
 mkdir -p "${BUILD_ROOT}"
@@ -97,17 +100,6 @@ if grep -q 'GS_FOR_IN' Source/GSTheme.m; then
   echo "Patched GSTheme.m fast-enumeration macros."
 else
   echo "GS_FOR_IN not found in GSTheme.m; no patch needed." >&2
-fi
-
-# Skip building the GSspell service, which fails because make_services
-# cannot load libgnustep-gui in this environment. The rest of gnustep-gui
-# builds and installs correctly without it.
-if [ -f Tools/GNUmakefile ]; then
-  # Comment out the GSspell service definition so it is not built.
-  sed -i 's/^\(SERVICE_NAME = GSspell\)/# \1/' Tools/GNUmakefile
-  echo "Patched Tools/GNUmakefile to skip GSspell service."
-else
-  echo "WARNING: Tools/GNUmakefile not found; GSspell may still be built." >&2
 fi
 
 GUI_OBJCFLAGS="-Wno-error=format-security -Wno-error=incompatible-pointer-types"
