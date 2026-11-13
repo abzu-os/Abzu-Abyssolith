@@ -9,10 +9,10 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # Fedora 45 does not package gnustep-gui or gnustep-back. This script builds
 # them directly from upstream source.
 #
-# Fedora's hardening flags include -Werror=format-security, which GNUstep's
-# NSApplication.m triggers. The suppression must either patch the source line
-# or override OBJCFLAGS on the make command line; ADDITIONAL_OBJCFLAGS is
-# placed before the default flags and cannot reliably suppress it.
+# Fedora's hardening flags include -Werror=format-security and
+# -Werror=incompatible-pointer-types, both of which GNUstep's source triggers.
+# We override OBJCFLAGS on the make command line so these specific warnings
+# remain warnings rather than fatal errors.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -78,10 +78,11 @@ else
   echo "The source may have changed; continuing without the patch." >&2
 fi
 
-# Also pass an explicit OBJCFLAGS override to make, so that any other
-# format-security warning in this tree is suppressed as a warning only.
+# Suppress fatal treatment of known GNUstep code patterns:
+#   - format-security: one call site in NSApplication.m
+#   - incompatible-pointer-types: the DESTROY() macro assigns nil to block pointers
 # Command-line make variables override the makefile defaults.
-GUI_OBJCFLAGS="-Wno-error=format-security"
+GUI_OBJCFLAGS="-Wno-error=format-security -Wno-error=incompatible-pointer-types"
 
 ./configure --prefix=/usr/local
 make -j"$(nproc)" OBJCFLAGS="${GUI_OBJCFLAGS}"
@@ -94,8 +95,8 @@ echo "--- Building gnustep-back from source ---"
 git clone --depth 1 https://github.com/gnustep/libs-back.git
 cd libs-back
 
-# Apply the same OBJCFLAGS override to the backend for consistency.
-BACK_OBJCFLAGS="-Wno-error=format-security"
+# Apply the same OBJCFLAGS overrides to the backend for consistency.
+BACK_OBJCFLAGS="-Wno-error=format-security -Wno-error=incompatible-pointer-types"
 
 ./configure --prefix=/usr/local
 make -j"$(nproc)" OBJCFLAGS="${BACK_OBJCFLAGS}"
