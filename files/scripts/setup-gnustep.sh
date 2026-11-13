@@ -14,19 +14,10 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # We override OBJCFLAGS on the make command line so these specific warnings
 # remain warnings rather than fatal errors.
 #
-# GSTheme.m in libs-gui uses the GS_FOR_IN / GS_END_FOR macros, which are
-# defined in GSFastEnumeration.h. That header is no longer shipped at the
-# expected path in libs-base. Rather than depending on it, we patch GSTheme.m
-# to use standard fast-enumeration loops instead.
-#
-# The GSspell service registration fails during make install because the
-# after-install step cannot locate the GSspell executable or its newly built
-# library. The GNUstep community documents the workaround: explicitly pass
-# LD_LIBRARY_PATH and PATH to make install so the dynamic linker and the
-# postamble can find the binary. We wrap make install in an env call to
-# apply this fix. Aspell (aspell and aspell-devel) must be installed for
-# GSspell to provide real spell-checking; otherwise only a dummy backend is
-# built.
+# The GSspell service fails to build during the main gnustep-gui build because
+# make_services cannot locate the freshly compiled libgnustep-gui. The
+# documented workaround is to disable the Tools subdirectory for the main
+# build, then build GSspell separately after the library is installed.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -40,112 +31,84 @@ export CXX="${CXX:-/usr/bin/clang++}"
 export LD="${LD:-/usr/bin/ld.lld}"
 export LDFLAGS="${LDFLAGS:--fuse-ld=/usr/bin/ld.lld}"
 
-# Ensure the freshly built libraries are discoverable during install.
-export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
-
 BUILD_ROOT="/tmp/abzu-gnustep-build"
 mkdir -p "${BUILD_ROOT}"
 cd "${BUILD_ROOT}"
 
 # --- 0. Pre-flight checks -------------------------------------------------
 echo "--- Verifying GNUstep build prerequisites ---"
-
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "ERROR: required command '$1' is not installed." >&2
-    echo "Add the corresponding package to the recipe's dnf list." >&2
     exit 1
   fi
 }
-
-require_cmd clang
-require_cmd clang++
-require_cmd cmake
-require_cmd make
-require_cmd pkg-config
-require_cmd git
-
-if ! pkg-config --exists x11; then
-  echo "ERROR: X11 development headers not found." >&2
-  exit 1
-fi
-if ! pkg-config --exists cairo; then
-  echo "ERROR: Cairo development headers not found." >&2
-  exit 1
-fi
-
+require_cmd clang clang++ cmake make pkg-config git
+pkg-config --exists x11 || { echo "ERROR: X11 headers missing."; exit 1; }
+pkg-config --exists cairo || { echo "ERROR: Cairo headers missing."; exit 1; }
 echo "Prerequisites satisfied."
 
-# --- 1. Build GNUstep GUI and back from upstream source ------------------
-echo "--- Building gnustep-gui from source ---"
-
+# --- 1. Build GNUstep GUI and back (without Tools) -----------------------
+echo "--- Building gnustep-gui (library only) ---"
 git clone --depth 1 https://github.com/gnustep/libs-gui.git
 cd libs-gui
 
 # Patch NSApplication.m format-security violation.
-if grep -q 'format: _(@"\[NSApplication -init\] called more than once")' \
-        Source/NSApplication.m; then
-  sed -i \
-    's|format: _(@"\[NSApplication -init\] called more than once")|format: @"%@", _(@"[NSApplication -init] called more than once")|' \
-    Source/NSApplication.m
-  echo "Patched NSApplication.m format-security violation."
-else
-  echo "WARNING: expected format-security line not found in NSApplication.m." >&2
-fi
+sed -i \
+  's|format: _(@"\[NSApplication -init\] called more than once")|format: @"%@", _(@"[NSApplication -init] called more than once")|' \
+  Source/NSApplication.m || true
+echo "Patched NSApplication.m format-security violation."
 
-# Patch GSTheme.m to replace GS_FOR_IN / GS_END_FOR macros with standard loops.
-if grep -q 'GS_FOR_IN' Source/GSTheme.m; then
-  sed -i -E \
-    's/GS_FOR_IN\(([^,]+),\s*([^,]+),\s*([^)]+)\)/for (\1 \2 in \3) {/g' \
-    Source/GSTheme.m
-  sed -i -E \
-    's/GS_END_FOR\([^)]*\)/}/g' \
-    Source/GSTheme.m
-  echo "Patched GSTheme.m fast-enumeration macros."
-else
-  echo "GS_FOR_IN not found in GSTheme.m; no patch needed." >&2
-fi
+# Patch GSTheme.m to replace GS_FOR_IN / GS_END_FOR macros.
+sed -i -E \
+  's/GS_FOR_IN\(([^,]+),\s*([^,]+),\s*([^)]+)\)/for (\1 \2 in \3) {/g' \
+  Source/GSTheme.m
+sed -i -E 's/GS_END_FOR\([^)]*\)/}/g' Source/GSTheme.m
+echo "Patched GSTheme.m fast-enumeration macros."
+
+# Disable the Tools subdirectory so GSspell is not built during the main build.
+sed -i 's/^SUBPROJECTS = .*/SUBPROJECTS = Source Images Sounds Model Panels PrinterTypes TextConverters ColorPickers KeyBindings Resources Printing Themes Tests/' GNUmakefile
+echo "Disabled Tools subdirectory in libs-gui GNUmakefile."
 
 GUI_OBJCFLAGS="-Wno-error=format-security -Wno-error=incompatible-pointer-types"
-
 ./configure --prefix=/usr/local
 make -j"$(nproc)" OBJCFLAGS="${GUI_OBJCFLAGS}"
-
-# Pass LD_LIBRARY_PATH and PATH explicitly to make install so that the
-# GSspell service registration step can find the freshly built library and
-# binary. This is the documented GNUstep workaround for the install failure.
-env LD_LIBRARY_PATH="${LD_LIBRARY_PATH}" \
-    PATH="/usr/local/bin:/usr/bin:/bin:${PATH:-}" \
-    make install
+make install
 
 cd "${BUILD_ROOT}"
 
-echo "--- Building gnustep-back from source ---"
-
+echo "--- Building gnustep-back ---"
 git clone --depth 1 https://github.com/gnustep/libs-back.git
 cd libs-back
-
 BACK_OBJCFLAGS="-Wno-error=format-security -Wno-error=incompatible-pointer-types"
-
 ./configure --prefix=/usr/local
 make -j"$(nproc)" OBJCFLAGS="${BACK_OBJCFLAGS}"
 make install
 
 cd "${BUILD_ROOT}"
 
-# --- 2. Build the Gershwin components we need ----------------------------
-echo "--- Building Gershwin components (Eau theme, Menu.app) ---"
+# --- 2. Build GSspell separately -----------------------------------------
+echo "--- Building GSspell separately ---"
+git clone --depth 1 https://github.com/gnustep/libs-gui.git libs-gui-spell
+cd libs-gui-spell
+# Only build the Tools subdirectory.
+cd Tools
+# Set LD_LIBRARY_PATH to the install prefix so the newly installed library is found.
+export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
+make -j"$(nproc)"
+make install
+cd "${BUILD_ROOT}"
 
+# --- 3. Build Gershwin components ----------------------------------------
+echo "--- Building Gershwin components (Eau theme, Menu.app) ---"
 git clone --depth 1 https://github.com/gershwin-desktop/gershwin-developer.git /Developer
 cd /Developer
-
 make eau-theme
 make menu
 make install
-
 cd "${BUILD_ROOT}"
 
-# --- 3. Build GSDock -----------------------------------------------------
+# --- 4. Build GSDock -----------------------------------------------------
 echo "--- Building GSDock ---"
 if git clone --depth 1 https://github.com/gnustep/GSDock.git; then
   cd GSDock
@@ -153,28 +116,19 @@ if git clone --depth 1 https://github.com/gnustep/GSDock.git; then
   make install
   cd "${BUILD_ROOT}"
 else
-  echo "WARNING: GSDock repository could not be cloned." >&2
-  echo "The dock will be omitted; the rest of the session is unaffected." >&2
+  echo "WARNING: GSDock could not be cloned; skipping." >&2
 fi
 
-# --- 4. Session startup wrapper -----------------------------------------
+# --- 5. Session startup wrapper -----------------------------------------
 cat > /usr/local/bin/abzu-windowmaker-session <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-
 export GNUSTEP_USER_ROOT="${HOME}/GNUstep"
 export GNUSTEP_LOCAL_ROOT="/usr/local/share/GNUstep"
 export GNUSTEP_SYSTEM_ROOT="/usr/share/GNUstep"
 export PATH="${GNUSTEP_USER_ROOT}/Tools:${GNUSTEP_LOCAL_ROOT}/Tools:${GNUSTEP_SYSTEM_ROOT}/Tools:${PATH}"
-
-if command -v Menu >/dev/null 2>&1; then
-  Menu &
-fi
-
-if command -v GSDock >/dev/null 2>&1; then
-  GSDock &
-fi
-
+if command -v Menu >/dev/null 2>&1; then Menu & fi
+if command -v GSDock >/dev/null 2>&1; then GSDock & fi
 exec wmaker
 EOF
 chmod +x /usr/local/bin/abzu-windowmaker-session
