@@ -7,9 +7,12 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # components (Eau theme, Menu.app) and GSDock.
 #
 # Fedora 45 does not package gnustep-gui or gnustep-back. This script builds
-# them directly from upstream source. Fedora's hardening flags include
-# -Werror=format-security, which GNUstep's NSApplication.m triggers. We add a
-# GNUmakefile.preamble to disable that specific error without patching source.
+# them directly from upstream source.
+#
+# Fedora's hardening flags include -Werror=format-security, which GNUstep's
+# NSApplication.m triggers. The suppression must either patch the source line
+# or override OBJCFLAGS on the make command line; ADDITIONAL_OBJCFLAGS is
+# placed before the default flags and cannot reliably suppress it.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -62,17 +65,26 @@ echo "--- Building gnustep-gui from source ---"
 git clone --depth 1 https://github.com/gnustep/libs-gui.git
 cd libs-gui
 
-# Disable -Werror=format-security for this source tree.
-# GNUstep's NSApplication.m uses a non-literal format string, which
-# Fedora's default hardening flags turn into a fatal error. This is a
-# known upstream incompatibility, not a local defect.
-cat > GNUmakefile.preamble <<'EOF'
-ADDITIONAL_OBJCFLAGS += -Wno-error=format-security
-ADDITIONAL_CFLAGS += -Wno-error=format-security
-EOF
+# Patch the single format-security violation in NSApplication.m.
+# The compiler note explicitly recommends the fix below.
+if grep -q 'format: _(@"\[NSApplication -init\] called more than once")' \
+        Source/NSApplication.m; then
+  sed -i \
+    's|format: _(@"\[NSApplication -init\] called more than once")|format: @"%@", _(@"[NSApplication -init] called more than once")|' \
+    Source/NSApplication.m
+  echo "Patched NSApplication.m format-security violation."
+else
+  echo "WARNING: expected format-security line not found in NSApplication.m." >&2
+  echo "The source may have changed; continuing without the patch." >&2
+fi
+
+# Also pass an explicit OBJCFLAGS override to make, so that any other
+# format-security warning in this tree is suppressed as a warning only.
+# Command-line make variables override the makefile defaults.
+GUI_OBJCFLAGS="-Wno-error=format-security"
 
 ./configure --prefix=/usr/local
-make -j"$(nproc)"
+make -j"$(nproc)" OBJCFLAGS="${GUI_OBJCFLAGS}"
 make install
 
 cd "${BUILD_ROOT}"
@@ -82,16 +94,11 @@ echo "--- Building gnustep-back from source ---"
 git clone --depth 1 https://github.com/gnustep/libs-back.git
 cd libs-back
 
-# Apply the same format-security override here as a precaution. The
-# libs-back source does not currently trigger the error, but it uses the
-# same compiler flags and may do so in a future revision.
-cat > GNUmakefile.preamble <<'EOF'
-ADDITIONAL_OBJCFLAGS += -Wno-error=format-security
-ADDITIONAL_CFLAGS += -Wno-error=format-security
-EOF
+# Apply the same OBJCFLAGS override to the backend for consistency.
+BACK_OBJCFLAGS="-Wno-error=format-security"
 
 ./configure --prefix=/usr/local
-make -j"$(nproc)"
+make -j"$(nproc)" OBJCFLAGS="${BACK_OBJCFLAGS}"
 make install
 
 cd "${BUILD_ROOT}"
@@ -104,7 +111,6 @@ cd /Developer
 
 make eau-theme
 make menu
-
 make install
 
 cd "${BUILD_ROOT}"
