@@ -14,10 +14,10 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # We override OBJCFLAGS on the make command line so these specific warnings
 # remain warnings rather than fatal errors.
 #
-# GSTheme.m uses GS_FOR_IN / GS_END_FOR macros that are defined in
-# GSFastEnumeration.h inside the gnustep-base source tree. When building
-# libs-gui against a system-installed gnustep-base, that private header is not
-# on the include path, so we clone libs-base and force-include it.
+# GSTheme.m in libs-gui uses the GS_FOR_IN / GS_END_FOR macros, which are
+# defined in GSFastEnumeration.h. That header is no longer shipped at the
+# expected path in libs-base. Rather than depending on it, we patch GSTheme.m
+# to use standard fast-enumeration loops instead.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -64,27 +64,13 @@ fi
 
 echo "Prerequisites satisfied."
 
-# --- 0b. Obtain GSFastEnumeration.h from libs-base -------------------------
-echo "--- Obtaining GSFastEnumeration.h from libs-base ---"
-
-git clone --depth 1 https://github.com/gnustep/libs-base.git
-FAST_ENUM_HEADER="${BUILD_ROOT}/libs-base/Source/GSFastEnumeration.h"
-
-if [ ! -f "${FAST_ENUM_HEADER}" ]; then
-  echo "ERROR: GSFastEnumeration.h not found after cloning libs-base." >&2
-  echo "Expected at: ${FAST_ENUM_HEADER}" >&2
-  exit 1
-fi
-
-echo "Using GSFastEnumeration.h from: ${FAST_ENUM_HEADER}"
-
 # --- 1. Build GNUstep GUI and back from upstream source ------------------
 echo "--- Building gnustep-gui from source ---"
 
 git clone --depth 1 https://github.com/gnustep/libs-gui.git
 cd libs-gui
 
-# Patch the single format-security violation in NSApplication.m.
+# Patch NSApplication.m format-security violation.
 if grep -q 'format: _(@"\[NSApplication -init\] called more than once")' \
         Source/NSApplication.m; then
   sed -i \
@@ -93,12 +79,24 @@ if grep -q 'format: _(@"\[NSApplication -init\] called more than once")' \
   echo "Patched NSApplication.m format-security violation."
 else
   echo "WARNING: expected format-security line not found in NSApplication.m." >&2
-  echo "The source may have changed; continuing without the patch." >&2
 fi
 
-# Force-include GSFastEnumeration.h so that GS_FOR_IN / GS_END_FOR macros
-# are available in GSTheme.m and any other compilation unit that needs them.
-GUI_OBJCFLAGS="-include ${FAST_ENUM_HEADER} -Wno-error=format-security -Wno-error=incompatible-pointer-types"
+# Patch GSTheme.m to replace GS_FOR_IN / GS_END_FOR macros with standard loops.
+if grep -q 'GS_FOR_IN' Source/GSTheme.m; then
+  # Replace GS_FOR_IN(type, var, collection) with for (type var in collection) {
+  sed -i -E \
+    's/GS_FOR_IN\(([^,]+),\s*([^,]+),\s*([^)]+)\)/for (\1 \2 in \3) {/g' \
+    Source/GSTheme.m
+  # Replace GS_END_FOR(collection) with }
+  sed -i -E \
+    's/GS_END_FOR\([^)]*\)/}/g' \
+    Source/GSTheme.m
+  echo "Patched GSTheme.m fast-enumeration macros."
+else
+  echo "GS_FOR_IN not found in GSTheme.m; no patch needed." >&2
+fi
+
+GUI_OBJCFLAGS="-Wno-error=format-security -Wno-error=incompatible-pointer-types"
 
 ./configure --prefix=/usr/local
 make -j"$(nproc)" OBJCFLAGS="${GUI_OBJCFLAGS}"
@@ -111,8 +109,7 @@ echo "--- Building gnustep-back from source ---"
 git clone --depth 1 https://github.com/gnustep/libs-back.git
 cd libs-back
 
-# Apply the same OBJCFLAGS overrides to the backend for consistency.
-BACK_OBJCFLAGS="-include ${FAST_ENUM_HEADER} -Wno-error=format-security -Wno-error=incompatible-pointer-types"
+BACK_OBJCFLAGS="-Wno-error=format-security -Wno-error=incompatible-pointer-types"
 
 ./configure --prefix=/usr/local
 make -j"$(nproc)" OBJCFLAGS="${BACK_OBJCFLAGS}"
