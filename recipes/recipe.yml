@@ -164,6 +164,9 @@ modules:
         - nodejs        # Required by install-hotline.sh
         - npm           # Required by install-hotline.sh
 
+        # --- Lemonade local LLM server (provides lemond.service) ---
+        - lemonade
+
   - type: kargs
     kargs:
       - preempt=full
