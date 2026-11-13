@@ -29,7 +29,9 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # clone) so that the generated gui.make and config.make are already present
 # in the parent directory.  The Tools build directory is added to PATH so
 # that make_services (built earlier in the same Tools build) is found when
-# creating the Info-gnustep.plist for GSspell.  The GNUstep makefile
+# creating the Info-gnustep.plist for GSspell.  Crucially, LD_LIBRARY_PATH
+# is passed explicitly to make so that the make_services sub-process can
+# load the newly installed GNUstep libraries.  The GNUstep makefile
 # environment must be sourced with nounset temporarily disabled because
 # GNUstep.sh references $ZSH_VERSION without a default.
 # -----------------------------------------------------------------------------
@@ -225,7 +227,9 @@ export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
 # Add the Tools build directory to PATH so that make_services (built earlier
 # in this same Tools build) is found when creating Info-gnustep.plist for GSspell.
 export PATH="${BUILD_ROOT}/libs-gui/Tools:${PATH}"
-make -j"$(nproc)"
+# Pass LD_LIBRARY_PATH explicitly to make so that the make_services sub‑process
+# (which validates the service plist) can load the GNUstep libraries.
+make -j"$(nproc)" LD_LIBRARY_PATH="$LD_LIBRARY_PATH"
 make install
 cd "${BUILD_ROOT}"
 
