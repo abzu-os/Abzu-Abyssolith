@@ -134,16 +134,28 @@ set -u
 export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib:/usr/local/System/Library/Libraries:${LD_LIBRARY_PATH:-}"
 
 # --- 4. Build GNUstep Base (libs-base) from source --------------------------
-# libs-base inherits the library combo and objc flag from the GNUstep
-# environment. No gnustep-make-specific flags are passed here.
 echo "--- Building gnustep-base (libs-base) from source ---"
+
+# 1. Compatibility symlink: some configure tests still expect libobjc.so.4
+#    even though libobjc2's real SONAME is libobjc.so.4.6.
+ln -sf /usr/local/lib64/libobjc.so.4.6 /usr/local/lib64/libobjc.so.4
+ldconfig
+
+# 2. Force the linker and the runtime loader to use the libobjc2 in
+#    /usr/local/lib64, not the GCC runtime in /usr/lib64.
+#    LIBS is used by configure's compile-and-run tests.
+export LIBS="-L/usr/local/lib64 -lobjc ${LIBS:-}"
+export LDFLAGS="-L/usr/local/lib64 ${LDFLAGS:-}"
+export LD_LIBRARY_PATH="/usr/local/lib64:${LD_LIBRARY_PATH:-}"
+
 git clone https://github.com/gnustep/libs-base.git
 cd libs-base
 ./configure \
     --prefix=/usr/local \
     CC="${CC}" CXX="${CXX}" \
-    CPPFLAGS="${CPPFLAGS}" \
-    LDFLAGS="${LDFLAGS}"
+    CPPFLAGS="-I/usr/local/include ${CPPFLAGS:-}" \
+    LDFLAGS="${LDFLAGS}" \
+    LIBS="${LIBS}"
 make -j"$(nproc)"
 make install
 ldconfig
