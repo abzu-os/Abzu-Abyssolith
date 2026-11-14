@@ -25,6 +25,27 @@ export CXX="${CXX:-/usr/bin/clang++}"
 export LD="${LD:-/usr/bin/ld.lld}"
 export LDFLAGS="${LDFLAGS:--fuse-ld=/usr/bin/ld.lld}"
 
+# -----------------------------------------------------------------------------
+# Runtime library paths
+#
+# libobjc2 and libdispatch install their .so files into /usr/local/lib64.
+# Every GNUstep component (libs-base, libs-gui, libs-back) installs into the
+# GNUstep layout at /usr/local/System/Library/Libraries. Neither path is on
+# Fedora's default linker search path, so configure tests that compile AND
+# RUN an Objective-C binary (notably libs-base's "whether objc really works")
+# would otherwise fail to load libobjc.so.4.6 at runtime.
+#
+# We register both paths in /etc/ld.so.conf.d and also export LD_LIBRARY_PATH
+# so subprocesses that ignore the ld.so cache still resolve them.
+# -----------------------------------------------------------------------------
+export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/System/Library/Libraries:${LD_LIBRARY_PATH:-}"
+export LDFLAGS="${LDFLAGS} -L/usr/local/lib64"
+
+mkdir -p /etc/ld.so.conf.d
+echo "/usr/local/lib64" > /etc/ld.so.conf.d/libobjc2.conf
+echo "/usr/local/System/Library/Libraries" > /etc/ld.so.conf.d/gnustep.conf
+ldconfig || true
+
 BUILD_ROOT="/tmp/abzu-gnustep-build"
 mkdir -p "${BUILD_ROOT}"
 cd "${BUILD_ROOT}"
@@ -62,6 +83,7 @@ cmake .. \
     -DCMAKE_INSTALL_PREFIX=/usr/local
 make -j"$(nproc)"
 make install
+ldconfig
 cd "${BUILD_ROOT}"
 
 # --- 2. Build libdispatch (GCD) ---------------------------------------------
@@ -78,6 +100,7 @@ cmake .. \
     -DCMAKE_INSTALL_PREFIX=/usr/local
 make -j"$(nproc)"
 make install
+ldconfig
 cd "${BUILD_ROOT}"
 
 # --- 3. Build and install gnustep-make with Clang + libobjc2 ----------------
@@ -94,6 +117,7 @@ cd tools-make
     CC="${CC}" CXX="${CXX}"
 make -j"$(nproc)"
 make install
+ldconfig
 cd "${BUILD_ROOT}"
 
 GNUSTEP_SH="/usr/local/System/Library/Makefiles/GNUstep.sh"
@@ -104,36 +128,33 @@ if [ ! -f "${GNUSTEP_SH}" ]; then
 fi
 echo "Found GNUstep.sh at ${GNUSTEP_SH}"
 
-# Make GNUstep libraries discoverable at runtime.
-mkdir -p /etc/ld.so.conf.d
-echo "/usr/local/System/Library/Libraries" > /etc/ld.so.conf.d/gnustep.conf
-ldconfig || true
-
 set +u
 # shellcheck disable=SC1090
 . "${GNUSTEP_SH}"
 set -u
 
+# GNUstep.sh may reset PATH-like variables; re-assert LD_LIBRARY_PATH so that
+# every subsequent configure test can still load libobjc2 from /usr/local/lib64.
+export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/System/Library/Libraries:${LD_LIBRARY_PATH:-}"
+
 # --- 4. Build GNUstep Base (libs-base) from source --------------------------
 # Building Base from source eliminates the system-header incompatibility
 # (__block on an ivar) and guarantees ABI consistency with libobjc2.
+#
+# NOTE: libs-base does NOT accept the gnustep-make options
+# (--with-library-combo, --with-objc-lib-flag, --enable-native-objc-exceptions,
+# --enable-objc-arc, --disable-mixedabi). It inherits them from the GNUstep
+# environment we sourced above. Passing them to libs-base's configure only
+# produces "unrecognized options" warnings.
 echo "--- Building gnustep-base (libs-base) from source ---"
 git clone https://github.com/gnustep/libs-base.git
 cd libs-base
-
-# The base configure should inherit the library combo from gnustep-make,
-# but we pass the same flags explicitly to be safe.
-# --disable-mixedabi avoids linking against the system GCC Objective-C runtime.
 ./configure \
     --prefix=/usr/local \
-    --with-library-combo=ng-gnu-gnu \
-    --with-objc-lib-flag=objc2 \
-    --enable-native-objc-exceptions \
-    --enable-objc-arc \
-    --disable-mixedabi \
     CC="${CC}" CXX="${CXX}"
 make -j"$(nproc)"
 make install
+ldconfig
 cd "${BUILD_ROOT}"
 
 # --- 5. Build GNUstep GUI (full, including Tools/GSspell) -------------------
@@ -158,6 +179,7 @@ GUI_OBJCFLAGS="-Wno-error=format-security -Wno-error=incompatible-pointer-types"
 ./configure --prefix=/usr/local
 make -j"$(nproc)" OBJCFLAGS="${GUI_OBJCFLAGS}"
 make install
+ldconfig
 cd "${BUILD_ROOT}"
 
 # --- 6. Build GNUstep Back ---------------------------------------------------
@@ -234,6 +256,7 @@ echo "Patched XGServerEvent.m fast-enumeration macros."
 ./configure --prefix=/usr/local
 make -j"$(nproc)"
 make install
+ldconfig
 cd "${BUILD_ROOT}"
 
 # --- 7. Verify GSspell is installed -----------------------------------------
@@ -245,6 +268,7 @@ if ! find /usr/local -type d -name 'GSspell.service' 2>/dev/null | grep -q .; th
     # shellcheck disable=SC1090
     . "${GNUSTEP_SH}"
     set -u
+    export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/System/Library/Libraries:${LD_LIBRARY_PATH:-}"
     make -C Tools -j"$(nproc)"
     make -C Tools -j"$(nproc)" install
     cd "${BUILD_ROOT}"
