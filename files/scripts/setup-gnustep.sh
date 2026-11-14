@@ -94,10 +94,10 @@ ldconfig
 cd "${BUILD_ROOT}"
 
 # --- 3. Build and install gnustep-make with Clang + libobjc2 ----------------
-# The critical part: gnustep-make must be configured with explicit CPPFLAGS
-# and LDFLAGS so that its recorded build rules point to libobjc2 in /usr/local.
-# Without this, downstream configure tests (notably libs-base) will link
-# against the system GCC libobjc or fail to find the runtime at execution time.
+# CRITICAL: --with-objc-lib-flag must be "lobjc", NOT "objc2".
+# libobjc2 installs libobjc.so.4.6 (with a libobjc.so symlink), so the
+# linker flag is -lobjc. "objc2" would make gnustep-make look for -lobjc2,
+# which does not exist, causing every downstream configure test to fail.
 echo "--- Building gnustep-make (with Clang + libobjc2) ---"
 git clone https://github.com/gnustep/tools-make.git
 cd tools-make
@@ -105,7 +105,8 @@ cd tools-make
     --prefix=/usr/local \
     --with-layout=gnustep \
     --with-library-combo=ng-gnu-gnu \
-    --with-objc-lib-flag=objc2 \
+    --with-runtime-abi=gnustep-2.2 \
+    --with-objc-lib-flag=lobjc \
     --enable-native-objc-exceptions \
     --enable-objc-arc \
     CC="${CC}" CXX="${CXX}" \
@@ -129,14 +130,12 @@ set +u
 . "${GNUSTEP_SH}"
 set -u
 
-# Re-assert the library paths after sourcing GNUstep.sh (which may reset them).
+# Re-assert the library paths after sourcing GNUstep.sh.
 export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib:/usr/local/System/Library/Libraries:${LD_LIBRARY_PATH:-}"
 
 # --- 4. Build GNUstep Base (libs-base) from source --------------------------
-# libs-base inherits the library combo and runtime choice from gnustep-make,
-# but its configure test must be able to find libobjc2 both at link time and
-# at execution time. We pass the same CPPFLAGS/LDFLAGS explicitly to ensure
-# the test binary is linked against the correct runtime and can be run.
+# libs-base inherits the library combo and objc flag from the GNUstep
+# environment. No gnustep-make-specific flags are passed here.
 echo "--- Building gnustep-base (libs-base) from source ---"
 git clone https://github.com/gnustep/libs-base.git
 cd libs-base
@@ -155,13 +154,11 @@ echo "--- Building gnustep-gui (full, including Tools/GSspell) ---"
 git clone https://github.com/gnustep/libs-gui.git
 cd libs-gui
 
-# Patch NSApplication.m format-security violation.
 sed -i \
     's|format: _(@"\[NSApplication -init\] called more than once")|format: @"%@", _(@"[NSApplication -init] called more than once")|' \
     Source/NSApplication.m || true
 echo "Patched NSApplication.m format-security violation."
 
-# Patch GSTheme.m fast-enumeration macros.
 sed -i -E \
     's/GS_FOR_IN\(([^,]+),\s*([^,]+),\s*([^)]+)\)/for (\1 \2 in \3) {/g' \
     Source/GSTheme.m
@@ -180,7 +177,6 @@ echo "--- Building gnustep-back ---"
 git clone https://github.com/gnustep/libs-back.git
 cd libs-back
 
-# Patch XGServerEvent.m fast-enumeration macros.
 python3 - <<'PYEOF'
 path = "Source/x11/XGServerEvent.m"
 with open(path, 'r') as f:
@@ -258,7 +254,6 @@ if ! find /usr/local -type d -name 'GSspell.service' 2>/dev/null | grep -q .; th
     echo "WARNING: GSspell.service not found after libs-gui install. Rebuilding Tools ..."
     cd "${BUILD_ROOT}/libs-gui"
     set +u
-    # shellcheck disable=SC1090
     . "${GNUSTEP_SH}"
     set -u
     export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib:/usr/local/System/Library/Libraries:${LD_LIBRARY_PATH:-}"
