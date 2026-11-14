@@ -23,24 +23,15 @@ export XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 export CC="${CC:-/usr/bin/clang}"
 export CXX="${CXX:-/usr/bin/clang++}"
 export LD="${LD:-/usr/bin/ld.lld}"
-export LDFLAGS="${LDFLAGS:--fuse-ld=/usr/bin/ld.lld}"
 
-# -----------------------------------------------------------------------------
-# Runtime library paths
-#
-# libobjc2 and libdispatch install their .so files into /usr/local/lib64.
-# Every GNUstep component (libs-base, libs-gui, libs-back) installs into the
-# GNUstep layout at /usr/local/System/Library/Libraries. Neither path is on
-# Fedora's default linker search path, so configure tests that compile AND
-# RUN an Objective-C binary (notably libs-base's "whether objc really works")
-# would otherwise fail to load libobjc.so.4.6 at runtime.
-#
-# We register both paths in /etc/ld.so.conf.d and also export LD_LIBRARY_PATH
-# so subprocesses that ignore the ld.so cache still resolve them.
-# -----------------------------------------------------------------------------
-export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/System/Library/Libraries:${LD_LIBRARY_PATH:-}"
-export LDFLAGS="${LDFLAGS} -L/usr/local/lib64"
+# libobjc2 installs into /usr/local. Every component built afterwards must
+# find both the headers and the shared library there, not in the system
+# directories (which may contain the GCC libobjc).
+export CPPFLAGS="-I/usr/local/include ${CPPFLAGS:-}"
+export LDFLAGS="-L/usr/local/lib64 -L/usr/local/lib -fuse-ld=${LD} ${LDFLAGS:-}"
+export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib:/usr/local/System/Library/Libraries:${LD_LIBRARY_PATH:-}"
 
+# Register the paths for the dynamic loader.
 mkdir -p /etc/ld.so.conf.d
 echo "/usr/local/lib64" > /etc/ld.so.conf.d/libobjc2.conf
 echo "/usr/local/System/Library/Libraries" > /etc/ld.so.conf.d/gnustep.conf
@@ -87,7 +78,6 @@ ldconfig
 cd "${BUILD_ROOT}"
 
 # --- 2. Build libdispatch (GCD) ---------------------------------------------
-# Recommended for a complete Foundation (NSOperationQueue, dispatch queues, etc.).
 echo "--- Building libdispatch (Grand Central Dispatch) ---"
 git clone https://github.com/apple/swift-corelibs-libdispatch.git
 cd swift-corelibs-libdispatch
@@ -104,6 +94,10 @@ ldconfig
 cd "${BUILD_ROOT}"
 
 # --- 3. Build and install gnustep-make with Clang + libobjc2 ----------------
+# The critical part: gnustep-make must be configured with explicit CPPFLAGS
+# and LDFLAGS so that its recorded build rules point to libobjc2 in /usr/local.
+# Without this, downstream configure tests (notably libs-base) will link
+# against the system GCC libobjc or fail to find the runtime at execution time.
 echo "--- Building gnustep-make (with Clang + libobjc2) ---"
 git clone https://github.com/gnustep/tools-make.git
 cd tools-make
@@ -114,7 +108,9 @@ cd tools-make
     --with-objc-lib-flag=objc2 \
     --enable-native-objc-exceptions \
     --enable-objc-arc \
-    CC="${CC}" CXX="${CXX}"
+    CC="${CC}" CXX="${CXX}" \
+    CPPFLAGS="${CPPFLAGS}" \
+    LDFLAGS="${LDFLAGS}"
 make -j"$(nproc)"
 make install
 ldconfig
@@ -133,25 +129,22 @@ set +u
 . "${GNUSTEP_SH}"
 set -u
 
-# GNUstep.sh may reset PATH-like variables; re-assert LD_LIBRARY_PATH so that
-# every subsequent configure test can still load libobjc2 from /usr/local/lib64.
-export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/System/Library/Libraries:${LD_LIBRARY_PATH:-}"
+# Re-assert the library paths after sourcing GNUstep.sh (which may reset them).
+export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib:/usr/local/System/Library/Libraries:${LD_LIBRARY_PATH:-}"
 
 # --- 4. Build GNUstep Base (libs-base) from source --------------------------
-# Building Base from source eliminates the system-header incompatibility
-# (__block on an ivar) and guarantees ABI consistency with libobjc2.
-#
-# NOTE: libs-base does NOT accept the gnustep-make options
-# (--with-library-combo, --with-objc-lib-flag, --enable-native-objc-exceptions,
-# --enable-objc-arc, --disable-mixedabi). It inherits them from the GNUstep
-# environment we sourced above. Passing them to libs-base's configure only
-# produces "unrecognized options" warnings.
+# libs-base inherits the library combo and runtime choice from gnustep-make,
+# but its configure test must be able to find libobjc2 both at link time and
+# at execution time. We pass the same CPPFLAGS/LDFLAGS explicitly to ensure
+# the test binary is linked against the correct runtime and can be run.
 echo "--- Building gnustep-base (libs-base) from source ---"
 git clone https://github.com/gnustep/libs-base.git
 cd libs-base
 ./configure \
     --prefix=/usr/local \
-    CC="${CC}" CXX="${CXX}"
+    CC="${CC}" CXX="${CXX}" \
+    CPPFLAGS="${CPPFLAGS}" \
+    LDFLAGS="${LDFLAGS}"
 make -j"$(nproc)"
 make install
 ldconfig
@@ -268,7 +261,7 @@ if ! find /usr/local -type d -name 'GSspell.service' 2>/dev/null | grep -q .; th
     # shellcheck disable=SC1090
     . "${GNUSTEP_SH}"
     set -u
-    export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/System/Library/Libraries:${LD_LIBRARY_PATH:-}"
+    export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib:/usr/local/System/Library/Libraries:${LD_LIBRARY_PATH:-}"
     make -C Tools -j"$(nproc)"
     make -C Tools -j"$(nproc)" install
     cd "${BUILD_ROOT}"
