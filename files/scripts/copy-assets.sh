@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
-set -oue pipefail
+set -euo pipefail
 
 # -----------------------------------------------------------------------------
 # copy-assets.sh
 #
-# Retains and deploys the Abzu-specific visual assets that survive the
-# transition to GNUstep / WindowMaker:
+# Deploys the Abzu-specific visual assets that complement the GNUstep /
+# WindowMaker desktop:
 #
 #   • Custom wallpapers  → /usr/share/backgrounds/abzu
-#   • Custom icons      → /usr/share/icons/hicolor
-#   • Icon cache        → regenerated so GNUstep launchers (GSDock, Menu.app)
-#                         and any retained GTK applications see the icons
+#   • Custom icons       → /usr/share/icons/hicolor
+#   • Icon cache         → regenerated so GNUstep launchers and any retained
+#                          GTK applications immediately see the Abzu icons
+#
+# NOTE: This script does NOT install Gershwin (Eau theme, Menu.app) or GSDock.
+# Those components are expected to be provided elsewhere in the build pipeline
+# (see the recipe's setup-gnustep.sh phase). If they are not, the resulting
+# ISO will boot into GNUstep without a shell.
 #
 # The script is intentionally idempotent and safe to run on every build.
 # -----------------------------------------------------------------------------
@@ -18,15 +23,17 @@ set -oue pipefail
 echo "::group::Deploying Abzu visual assets"
 
 # --- Wallpapers -------------------------------------------------------------
-# Wallpapers are expected under files/wallpapers/ in the repository.
-# If that directory does not exist, the build continues without failing.
+# Wallpapers are expected under files/wallpapers/ in the repository, which the
+# build system bind-mounts at /tmp/files/. If that directory does not exist,
+# the build continues without failing.
 WALLPAPER_SRC="/tmp/files/wallpapers"
 WALLPAPER_DEST="/usr/share/backgrounds/abzu"
 
 if [[ -d "${WALLPAPER_SRC}" ]]; then
   echo "Deploying wallpapers from ${WALLPAPER_SRC} to ${WALLPAPER_DEST}"
   mkdir -p "${WALLPAPER_DEST}"
-  # Copy all files while preserving relative paths and permissions.
+  # Copy all files (including dotfiles) while preserving relative paths and
+  # permissions.
   cp -a "${WALLPAPER_SRC}/." "${WALLPAPER_DEST}/"
 else
   echo "No files/wallpapers/ directory found — skipping wallpaper deployment."
@@ -48,7 +55,7 @@ else
 fi
 
 # --- Icon cache -------------------------------------------------------------
-# Regenerate the hicolor icon cache so GSDock, Menu.app and any retained GTK
+# Regenerate the hicolor icon cache so GNUstep launchers and any retained GTK
 # applications immediately see the Abzu icons without a logout.
 if [[ -d "${ICON_DEST}" ]]; then
   echo "Regenerating hicolor icon cache"
