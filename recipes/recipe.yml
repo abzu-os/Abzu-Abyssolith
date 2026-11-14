@@ -47,14 +47,24 @@ modules:
         - xz
         - file
 
-        # --- GNUstep base libraries ---
+        # --- GNUstep build prerequisites ---
+        # NOTE: libobjc2, gnustep-make, libdispatch, libs-base (Foundation),
+        # libs-gui (AppKit) and libs-back are ALL built from source by
+        # setup-gnustep.sh using a single Clang + libobjc2 toolchain.
+        #
+        # We intentionally do NOT install gnustep-base / gnustep-base-devel
+        # from Fedora: their headers (specifically
+        # /usr/include/Foundation/NSBackgroundActivityScheduler.h) contain
+        # an illegal '__block' on an Objective-C instance variable that
+        # modern Clang rejects as a hard error.
+        #
+        # libobjc2 / libobjc2-devel / gnustep-make are kept as a system-wide
+        # fallback (gnustep-config in /usr/bin), and were shown to coexist
+        # cleanly with our source build in prior builds -- our
+        # /usr/local/System/Tools/gnustep-config takes PATH precedence.
         - libobjc2
         - libobjc2-devel
         - gnustep-make
-        - gnustep-base
-        - gnustep-base-devel
-        # NOTE: gnustep-gui and gnustep-back are NOT shipped in Fedora 45.
-        # They are built from source by setup-gnustep.sh.
 
         # --- Aspell (required for GSspell.service) ---
         - aspell
@@ -95,8 +105,10 @@ modules:
         - libffi-devel
         - libicu-devel
         - libcurl-devel
+        - zlib-devel            # libs-base: NSData compression
+        - avahi-devel           # libs-base: NSNetService / Bonjour
         - libarchive-devel
-        - libdispatch-devel
+        - libdispatch-devel     # provides dispatch.pc fallback; source build shadows it
         - libnotify-devel
         - dbus-devel
         - alsa-lib-devel
@@ -240,9 +252,14 @@ modules:
 
   - type: script
     scripts:
-      # Build & install GNUstep GUI/back, Gershwin (Eau theme, Menu.app)
-      # and GSDock.  Fedora 45 does not package gnustep-gui/back, so they are
-      # built from source here.
+      # Build & install the full GNUstep stack from source with a single
+      # Clang + libobjc2 toolchain:
+      #   libobjc2 -> libdispatch -> gnustep-make -> libs-base (Foundation)
+      #   -> libs-gui (AppKit + Tools/GSspell) -> libs-back (x11/cairo)
+      # then Gershwin (Eau theme, Menu.app) and GSDock via copy-assets.sh.
+      # Fedora 45 does not package gnustep-gui/back, and its gnustep-base
+      # headers are incompatible with modern Clang, so nothing from the
+      # GNUstep stack is installed via dnf.
       - setup-gnustep.sh
       - copy-assets.sh
 
