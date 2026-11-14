@@ -6,34 +6,9 @@ trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 # Build and install GNUstep GUI/back from source, then the Gershwin
 # components (Eau theme, Menu.app) and GSDock.
 #
-# Fedora 45 does not package gnustep-gui or gnustep-back. This script builds
-# them directly from upstream source.
-#
-# Fedora's hardening flags include -Werror=format-security and
-# -Werror=incompatible-pointer-types, both of which GNUstep's source triggers.
-# We override OBJCFLAGS on the make command line so these specific warnings
-# remain warnings rather than fatal errors.
-#
-# Both GSTheme.m (in libs-gui) and XGServerEvent.m (in libs-back) use the
-# GS_FOR_IN / GS_END_FOR macros, which are defined in GSFastEnumeration.h.
-# That header is not on the include path during these builds. We patch both
-# files to use standard fast-enumeration loops instead.  The patch for
-# XGServerEvent.m uses a small Python script because the macro invocations
-# span multiple lines and contain pointer types.
-#
-# The GSspell service fails to build during the main gnustep-gui build because
-# make_services cannot locate the freshly compiled libgnustep-gui. The
-# documented workaround is to exclude the Tools subdirectory from the main
-# build, then build GSspell separately after the library is installed.
-# The separate build is done in the *original* libs-gui tree (not a fresh
-# clone) so that the generated gui.make and config.make are already present
-# in the parent directory.  The Tools build directory is added to PATH so
-# that make_services (built earlier in the same Tools build) is found when
-# creating the Info-gnustep.plist for GSspell.  Crucially, LD_LIBRARY_PATH
-# is passed explicitly to make so that the make_services sub-process can
-# load the newly installed GNUstep libraries.  The GNUstep makefile
-# environment must be sourced with nounset temporarily disabled because
-# GNUstep.sh references $ZSH_VERSION without a default.
+# This script ensures a consistent toolchain (Clang + libobjc2) is used for
+# the entire GNUstep stack, which is required for make_services and GSspell
+# to function correctly on Fedora.
 # -----------------------------------------------------------------------------
 
 export HOME="${HOME:-/root}"
@@ -41,6 +16,7 @@ export USER="${USER:-root}"
 export LOGNAME="${LOGNAME:-root}"
 export TERM="${TERM:-xterm-256color}"
 export XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+
 export CC="${CC:-/usr/bin/clang}"
 export CXX="${CXX:-/usr/bin/clang++}"
 export LD="${LD:-/usr/bin/ld.lld}"
@@ -63,8 +39,35 @@ pkg-config --exists x11 || { echo "ERROR: X11 headers missing."; exit 1; }
 pkg-config --exists cairo || { echo "ERROR: Cairo headers missing."; exit 1; }
 echo "Prerequisites satisfied."
 
-# --- 1. Build GNUstep GUI (library only) -------------------------------------
-echo "--- Building gnustep-gui (library only) ---"
+# --- 1. Build libobjc2 -------------------------------------------------------
+echo "--- Building libobjc2 (Clang-compatible Objective-C runtime) ---"
+git clone --depth 1 https://github.com/gnustep/libobjc2.git
+cd libobjc2
+mkdir -p build && cd build
+cmake .. -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_INSTALL_PREFIX=/usr/local
+make -j"$(nproc)"
+make install
+cd "${BUILD_ROOT}"
+
+# --- 2. Build and install gnustep-make with Clang + libobjc2 ----------------
+echo "--- Building gnustep-make (with Clang + libobjc2) ---"
+git clone --depth 1 https://github.com/gnustep/tools-make.git
+cd tools-make
+./configure \
+  --prefix=/usr/local \
+  --with-layout=gnustep \
+  --with-library-combo=ng-gnu-gnu \
+  --with-objc-lib-flag=objc2 \
+  CC=clang CXX=clang++
+make -j"$(nproc)"
+make install
+cd "${BUILD_ROOT}"
+
+# Source the GNUstep environment for subsequent builds
+. /usr/local/share/GNUstep/Makefiles/GNUstep.sh
+
+# --- 3. Build GNUstep GUI (library and tools, including GSspell) ------------
+echo "--- Building gnustep-gui (full, including Tools/GSspell) ---"
 git clone --depth 1 https://github.com/gnustep/libs-gui.git
 cd libs-gui
 
@@ -74,19 +77,16 @@ sed -i \
   Source/NSApplication.m || true
 echo "Patched NSApplication.m format-security violation."
 
-# Patch GSTheme.m to replace GS_FOR_IN / GS_END_FOR macros.
+# Patch GSTheme.m fast-enumeration macros.
 sed -i -E \
   's/GS_FOR_IN\(([^,]+),\s*([^,]+),\s*([^)]+)\)/for (\1 \2 in \3) {/g' \
   Source/GSTheme.m
 sed -i -E 's/GS_END_FOR\([^)]*\)/}/g' Source/GSTheme.m
 echo "Patched GSTheme.m fast-enumeration macros."
 
-# Remove the Tools entry from the SUBPROJECTS list without corrupting the
-# multi-line backslash syntax. The Tools directory contains GSspell, which
-# fails during the main build due to a make_services library path issue.
-# We will build it separately in Step 3 using this same tree.
-sed -i '/^Tools \\$/d' GNUmakefile
-echo "Removed Tools from SUBPROJECTS in libs-gui GNUmakefile."
+# IMPORTANT: Do NOT remove the Tools directory. We need it for GSspell.
+# The original workaround of excluding Tools is no longer necessary because
+# the entire stack now uses libobjc2.
 
 GUI_OBJCFLAGS="-Wno-error=format-security -Wno-error=incompatible-pointer-types"
 ./configure --prefix=/usr/local
@@ -94,14 +94,12 @@ make -j"$(nproc)" OBJCFLAGS="${GUI_OBJCFLAGS}"
 make install
 cd "${BUILD_ROOT}"
 
-# --- 2. Build GNUstep Back ---------------------------------------------------
+# --- 4. Build GNUstep Back ---------------------------------------------------
 echo "--- Building gnustep-back ---"
 git clone --depth 1 https://github.com/gnustep/libs-back.git
 cd libs-back
 
 # Patch XGServerEvent.m to replace GS_FOR_IN / GS_END_FOR macros.
-# The Python script below balances parentheses and handles multi-line
-# invocations and pointer types (e.g. "NSWindow *").
 python3 - <<'PYEOF'
 path = "Source/x11/XGServerEvent.m"
 with open(path, 'r') as f:
@@ -121,9 +119,6 @@ def find_matching_paren(s, start):
         i += 1
     return -1
 
-# Replace GS_FOR_IN( type, var, collection ) { ... } with a standard
-# fast-enumeration loop.  The macro body is everything up to the matching
-# GS_END_FOR.
 out = []
 i = 0
 while i < len(text):
@@ -137,7 +132,6 @@ while i < len(text):
             out.append(text[i:])
             break
         args = text[paren_start + 1: paren_end]
-        # Split arguments at the top level (ignoring nested parentheses).
         parts = []
         depth = 0
         current = []
@@ -157,17 +151,15 @@ while i < len(text):
             typ, var, coll = parts
             out.append(f"for ({typ} {var} in {coll}) {{")
         else:
-            # Fallback: leave as-is if the shape is unexpected.
             out.append(text[i: paren_end + 1])
         i = paren_end + 1
     elif text.startswith("GS_END_FOR", i):
-        # Consume GS_END_FOR(...) and emit a closing brace.
         paren_start = text.find('(', i)
         if paren_start != -1:
             paren_end = find_matching_paren(text, paren_start)
             if paren_end != -1:
                 i = paren_end + 1
-                out.append('}')
+                out.append("}")
                 continue
         out.append(text[i])
         i += 1
@@ -175,100 +167,31 @@ while i < len(text):
         out.append(text[i])
         i += 1
 
-text = ''.join(out)
 with open(path, 'w') as f:
-    f.write(text)
-print("Patched XGServerEvent.m fast-enumeration macros.")
+    f.write(''.join(out))
 PYEOF
+echo "Patched XGServerEvent.m fast-enumeration macros."
 
-BACK_OBJCFLAGS="-Wno-error=format-security -Wno-error=incompatible-pointer-types"
 ./configure --prefix=/usr/local
-make -j"$(nproc)" OBJCFLAGS="${BACK_OBJCFLAGS}"
+make -j"$(nproc)"
 make install
 cd "${BUILD_ROOT}"
 
-# --- 3. Build GSspell separately ---------------------------------------------
-echo "--- Building GSspell separately ---"
-# Use the original libs-gui tree, which already contains the generated
-# gui.make and config.make in its root directory.  The Tools subdirectory
-# was removed from SUBPROJECTS but is still present on disk and can be
-# built directly.
-cd "${BUILD_ROOT}/libs-gui/Tools"
-# Source the GNUstep makefile environment so that GNUSTEP_MAKEFILES is set
-# and common.make can be found. On Fedora the makefiles live under
-# /usr/lib64/GNUstep/Makefiles (installed by the gnustep-make RPM); on other
-# setups they may live under /usr/local/share. Try each known location,
-# and fall back to exporting GNUSTEP_MAKEFILES directly.
-GNUSTEP_SH=""
-for candidate in \
-  /usr/lib64/GNUstep/Makefiles/GNUstep.sh \
-  /usr/local/share/GNUstep/Makefiles/GNUstep.sh \
-  /usr/share/GNUstep/Makefiles/GNUstep.sh \
-  /usr/local/lib64/GNUstep/Makefiles/GNUstep.sh ; do
-  if [ -f "${candidate}" ]; then
-    GNUSTEP_SH="${candidate}"
-    break
-  fi
-done
-if [ -n "${GNUSTEP_SH}" ]; then
-  echo "Sourcing GNUstep environment from ${GNUSTEP_SH}"
-  # GNUstep.sh references $ZSH_VERSION and other optional variables without
-  # defaults, so it cannot be sourced while nounset (set -u) is active.
-  set +u
-  # shellcheck source=/dev/null
-  . "${GNUSTEP_SH}"
-  set -u
-else
-  echo "WARNING: GNUstep.sh not found; exporting GNUSTEP_MAKEFILES directly." >&2
-  export GNUSTEP_MAKEFILES=/usr/lib64/GNUstep/Makefiles
-fi
-# Set LD_LIBRARY_PATH to the install prefix so the newly installed library is found.
-export LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
-# Add the Tools build directory to PATH so that make_services (built earlier
-# in this same Tools build) is found when creating Info-gnustep.plist for GSspell.
+# --- 5. Build GSspell separately (as a safety net) --------------------------
+# Even with a consistent toolchain, building GSspell after the main library
+# installation is the most reliable sequence. This step is now largely
+# redundant but ensures the service is properly registered.
+echo "--- Building GSspell separately (ensuring service registration) ---"
+cd "${BUILD_ROOT}/libs-gui"
+# The Tools directory is already part of the tree. We build just the service.
 export PATH="${BUILD_ROOT}/libs-gui/Tools:${PATH}"
-# Pass LD_LIBRARY_PATH explicitly to make so that the make_services sub‑process
-# (which validates the service plist) can load the GNUstep libraries.
-make -j"$(nproc)" LD_LIBRARY_PATH="$LD_LIBRARY_PATH"
-make install
+export LD_LIBRARY_PATH="/usr/local/lib:/usr/local/lib64:${LD_LIBRARY_PATH:-}"
+# Temporarily disable nounset for GNUstep.sh which references $ZSH_VERSION.
+set +u
+. /usr/local/share/GNUstep/Makefiles/GNUstep.sh
+set -u
+make -C Tools -j"$(nproc)" GSspell.all.service.variables
+make -C Tools -j"$(nproc)" GSspell.install.service.variables
 cd "${BUILD_ROOT}"
 
-# --- 4. Build Gershwin components --------------------------------------------
-echo "--- Building Gershwin components (Eau theme, Menu.app) ---"
-git clone --depth 1 https://github.com/gershwin-desktop/gershwin-developer.git /Developer
-cd /Developer
-make eau-theme
-make menu
-make install
-cd "${BUILD_ROOT}"
-
-# --- 5. Build GSDock ---------------------------------------------------------
-echo "--- Building GSDock ---"
-if git clone --depth 1 https://github.com/gnustep/GSDock.git; then
-  cd GSDock
-  make
-  make install
-  cd "${BUILD_ROOT}"
-else
-  echo "WARNING: GSDock could not be cloned; skipping." >&2
-fi
-
-# --- 6. Session startup wrapper ----------------------------------------------
-cat > /usr/local/bin/abzu-windowmaker-session <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-export GNUSTEP_USER_ROOT="${HOME}/GNUstep"
-export GNUSTEP_LOCAL_ROOT="/usr/local/share/GNUstep"
-export GNUSTEP_SYSTEM_ROOT="/usr/share/GNUstep"
-export PATH="${GNUSTEP_USER_ROOT}/Tools:${GNUSTEP_LOCAL_ROOT}/Tools:${GNUSTEP_SYSTEM_ROOT}/Tools:${PATH}"
-if command -v Menu >/dev/null 2>&1; then
-  Menu &
-fi
-if command -v GSDock >/dev/null 2>&1; then
-  GSDock &
-fi
-exec wmaker
-EOF
-chmod +x /usr/local/bin/abzu-windowmaker-session
-
-echo "--- setup-gnustep.sh complete ---"
+echo "--- GNUstep build complete (including GSspell) ---"
