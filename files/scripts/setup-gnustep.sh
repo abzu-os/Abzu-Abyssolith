@@ -2,6 +2,18 @@
 set -euo pipefail
 trap 'echo "setup-gnustep.sh failed at line $LINENO (exit $?)" >&2' ERR
 
+# -----------------------------------------------------------------------------
+# Build a complete GNUstep stack from source using Clang + libobjc2.
+#
+# Order:
+#   1. libobjc2 (Objective-C runtime)
+#   2. libdispatch (GCD - recommended)
+#   3. gnustep-make (build system)
+#   4. libs-base (Foundation)
+#   5. libs-gui  (AppKit + Tools/GSspell)
+#   6. libs-back (display back-end)
+# -----------------------------------------------------------------------------
+
 export HOME="${HOME:-/root}"
 export USER="${USER:-root}"
 export LOGNAME="${LOGNAME:-root}"
@@ -28,72 +40,105 @@ require_cmd() {
 require_cmd clang clang++ cmake make pkg-config git python3
 pkg-config --exists x11 || { echo "ERROR: X11 headers missing."; exit 1; }
 pkg-config --exists cairo || { echo "ERROR: Cairo headers missing."; exit 1; }
+pkg-config --exists libffi || { echo "ERROR: libffi headers missing."; exit 1; }
+pkg-config --exists gnutls || { echo "ERROR: GnuTLS headers missing."; exit 1; }
+pkg-config --exists libxml-2.0 || { echo "ERROR: libxml2 headers missing."; exit 1; }
+pkg-config --exists libxslt || { echo "ERROR: libxslt headers missing."; exit 1; }
+pkg-config --exists zlib || { echo "ERROR: zlib headers missing."; exit 1; }
+pkg-config --exists libcurl || { echo "ERROR: libcurl headers missing."; exit 1; }
 echo "Prerequisites satisfied."
 
 # --- 1. Build libobjc2 -------------------------------------------------------
 echo "--- Building libobjc2 (Clang-compatible Objective-C runtime) ---"
-git clone --depth 1 https://github.com/gnustep/libobjc2.git
+git clone --recurse-submodules https://github.com/gnustep/libobjc2.git
 cd libobjc2
 mkdir -p build && cd build
 cmake .. \
-    -DCMAKE_C_COMPILER=clang \
-    -DCMAKE_CXX_COMPILER=clang++ \
+    -DCMAKE_C_COMPILER="${CC}" \
+    -DCMAKE_CXX_COMPILER="${CXX}" \
+    -DCMAKE_ASM_COMPILER="${CC}" \
+    -DCMAKE_LINKER="${LD}" \
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_INSTALL_PREFIX=/usr/local
 make -j"$(nproc)"
 make install
 cd "${BUILD_ROOT}"
 
-# --- 2. Build and install gnustep-make with Clang + libobjc2 ----------------
+# --- 2. Build libdispatch (GCD) ---------------------------------------------
+# Recommended for a complete Foundation (NSOperationQueue, dispatch queues, etc.).
+echo "--- Building libdispatch (Grand Central Dispatch) ---"
+git clone https://github.com/apple/swift-corelibs-libdispatch.git
+cd swift-corelibs-libdispatch
+mkdir -p build && cd build
+cmake .. \
+    -DCMAKE_C_COMPILER="${CC}" \
+    -DCMAKE_CXX_COMPILER="${CXX}" \
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    -DINSTALL_PRIVATE_HEADERS=YES \
+    -DCMAKE_INSTALL_PREFIX=/usr/local
+make -j"$(nproc)"
+make install
+cd "${BUILD_ROOT}"
+
+# --- 3. Build and install gnustep-make with Clang + libobjc2 ----------------
 echo "--- Building gnustep-make (with Clang + libobjc2) ---"
-git clone --depth 1 https://github.com/gnustep/tools-make.git
+git clone https://github.com/gnustep/tools-make.git
 cd tools-make
 ./configure \
     --prefix=/usr/local \
     --with-layout=gnustep \
     --with-library-combo=ng-gnu-gnu \
     --with-objc-lib-flag=objc2 \
-    CC=clang CXX=clang++
+    --enable-native-objc-exceptions \
+    --enable-objc-arc \
+    CC="${CC}" CXX="${CXX}"
 make -j"$(nproc)"
 make install
 cd "${BUILD_ROOT}"
 
-# NOTE: With --with-layout=gnustep, the makefiles are installed under
-# /usr/local/System/Library/Makefiles (NOT /usr/local/share/GNUstep/Makefiles).
 GNUSTEP_SH="/usr/local/System/Library/Makefiles/GNUstep.sh"
 if [ ! -f "${GNUSTEP_SH}" ]; then
-    echo "ERROR: expected ${GNUSTEP_SH} not found. Available copies:" >&2
+    echo "ERROR: expected ${GNUSTEP_SH} not found." >&2
     find /usr/local /usr/lib64 /usr/share -name 'GNUstep.sh' 2>/dev/null || true
     exit 1
 fi
 echo "Found GNUstep.sh at ${GNUSTEP_SH}"
 
-# Make GNUstep libraries discoverable at runtime, including for tools such as
-# make_services that are invoked *during* the libs-gui install step.
+# Make GNUstep libraries discoverable at runtime.
 mkdir -p /etc/ld.so.conf.d
 echo "/usr/local/System/Library/Libraries" > /etc/ld.so.conf.d/gnustep.conf
 ldconfig || true
 
-# Source the GNUstep environment for subsequent builds.
-# set +u is required because GNUstep.sh references some variables (e.g.
-# ZSH_VERSION) without checking whether they are set.
 set +u
 # shellcheck disable=SC1090
 . "${GNUSTEP_SH}"
 set -u
 
-echo "gnustep-config in PATH: $(command -v gnustep-config || echo 'NOT FOUND')"
-if command -v gnustep-config >/dev/null 2>&1; then
-    echo "GNUSTEP_MAKEFILES: $(gnustep-config --variable=GNUSTEP_MAKEFILES || true)"
-fi
+# --- 4. Build GNUstep Base (libs-base) from source --------------------------
+# Building Base from source eliminates the system-header incompatibility
+# (__block on an ivar) and guarantees ABI consistency with libobjc2.
+echo "--- Building gnustep-base (libs-base) from source ---"
+git clone https://github.com/gnustep/libs-base.git
+cd libs-base
 
-# --- 3. Build GNUstep GUI (full, including Tools/GSspell) -------------------
-# We deliberately do NOT remove the Tools subproject. GSspell (which lives
-# under Tools/) is built as part of the normal libs-gui "make all" / "make
-# install" pass. Now that the whole stack consistently uses libobjc2, the
-# make_services tool invoked during installation can generate the
-# Info-gnustep.plist files correctly.
+# The base configure should inherit the library combo from gnustep-make,
+# but we pass the same flags explicitly to be safe.
+# --disable-mixedabi avoids linking against the system GCC Objective-C runtime.
+./configure \
+    --prefix=/usr/local \
+    --with-library-combo=ng-gnu-gnu \
+    --with-objc-lib-flag=objc2 \
+    --enable-native-objc-exceptions \
+    --enable-objc-arc \
+    --disable-mixedabi \
+    CC="${CC}" CXX="${CXX}"
+make -j"$(nproc)"
+make install
+cd "${BUILD_ROOT}"
+
+# --- 5. Build GNUstep GUI (full, including Tools/GSspell) -------------------
 echo "--- Building gnustep-gui (full, including Tools/GSspell) ---"
-git clone --depth 1 https://github.com/gnustep/libs-gui.git
+git clone https://github.com/gnustep/libs-gui.git
 cd libs-gui
 
 # Patch NSApplication.m format-security violation.
@@ -115,9 +160,9 @@ make -j"$(nproc)" OBJCFLAGS="${GUI_OBJCFLAGS}"
 make install
 cd "${BUILD_ROOT}"
 
-# --- 4. Build GNUstep Back ---------------------------------------------------
+# --- 6. Build GNUstep Back ---------------------------------------------------
 echo "--- Building gnustep-back ---"
-git clone --depth 1 https://github.com/gnustep/libs-back.git
+git clone https://github.com/gnustep/libs-back.git
 cd libs-back
 
 # Patch XGServerEvent.m fast-enumeration macros.
@@ -191,9 +236,7 @@ make -j"$(nproc)"
 make install
 cd "${BUILD_ROOT}"
 
-# --- 5. Verify GSspell is installed -----------------------------------------
-# GSspell should already be installed by the "make install" of libs-gui
-# (it lives under Tools/GSspell). This is a defensive check only.
+# --- 7. Verify GSspell is installed -----------------------------------------
 echo "--- Verifying GSspell is installed ---"
 if ! find /usr/local -type d -name 'GSspell.service' 2>/dev/null | grep -q .; then
     echo "WARNING: GSspell.service not found after libs-gui install. Rebuilding Tools ..."
@@ -215,4 +258,4 @@ else
     exit 1
 fi
 
-echo "--- GNUstep build complete (including GSspell) ---"
+echo "--- GNUstep build complete (including libs-base and GSspell) ---"
