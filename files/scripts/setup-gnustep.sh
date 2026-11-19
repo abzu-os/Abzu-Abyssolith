@@ -20,8 +20,8 @@ export LOGNAME="${LOGNAME:-root}"
 export TERM="${TERM:-xterm-256color}"
 export XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 
-export CC="${CC:-/usr/bin/clang}"
-export CXX="${CXX:-/usr/bin/clang++}"
+export CC="${CC:-/usr/bin/clang-21}"
+export CXX="${CXX:-/usr/bin/clang++-21}"
 export LD="${LD:-/usr/bin/ld.lld}"
 
 # libobjc2 installs into /usr/local. Every component built afterwards must
