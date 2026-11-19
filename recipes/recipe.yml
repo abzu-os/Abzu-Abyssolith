@@ -1,8 +1,6 @@
 # yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
-
 name: abzu
 description: An elegant, powerful operating system for desktops, workstations and homelabs that honours and preserves the ancient traditions.
-
 base-image: ghcr.io/ublue-os/base-main
 image-version: latest
 
@@ -38,13 +36,11 @@ modules:
         - gcc
         - gcc-c++
         - gcc-objc
-
         # Default, up-to-date LLVM/Clang (Clang 23) — retained for general
         # development and all non-GNUstep tasks.
         - clang
         - llvm
         - lld
-
         # Version-pinned Clang 21 for the GNUstep stack only. These install
         # into version-specific resource directories and coexist cleanly
         # with the unversioned packages above.
@@ -52,7 +48,6 @@ modules:
         - clang21-devel
         - llvm21
         - lld21
-
         - make
         - cmake
         - ninja-build
@@ -126,10 +121,13 @@ modules:
         - libffi-devel
         - libicu-devel
         - libcurl-devel
-        - zlib-devel            # libs-base: NSData compression
-        - avahi-devel           # libs-base: NSNetService / Bonjour
+        - zlib-devel
+        # libs-base: NSData compression
+        - avahi-devel
+        # libs-base: NSNetService / Bonjour
         - libarchive-devel
-        - libdispatch-devel     # provides dispatch.pc fallback; source build shadows it
+        - libdispatch-devel
+        # provides dispatch.pc fallback; source build shadows it
         - libnotify-devel
         - dbus-devel
         - alsa-lib-devel
@@ -151,6 +149,9 @@ modules:
         - gtk-update-icon-cache
         - gtk-murrine-engine
         - gtk2-engines
+        # Runtime for the Triforce v0.5.2+ AppImage launcher. Without it the
+        # AppImage still opens its classic builder window.
+        - webkit2gtk4.1
 
         # --- Retained Abzu-specific / utility packages ---
         - gdouros-akkadian-fonts
@@ -182,7 +183,6 @@ modules:
         - rEFInd-tools
         - rEFInd-unsigned-ia32
         - rEFInd-unsigned-x64
-
         - wmCalClock
         - wmweather+
         - feh
@@ -194,11 +194,16 @@ modules:
         - optipng
 
         # --- Dependencies for helper scripts ---
-        - fuse3-devel   # Required by install-apple2pi.sh
-        - pipx          # Required by install-beets.sh
-        - rust          # Provides cargo, required by install-snow.sh
-        - nodejs        # Required by install-hotline.sh
-        - npm           # Required by install-hotline.sh
+        - fuse3-devel
+        # Required by install-apple2pi.sh
+        - pipx
+        # Required by install-beets.sh
+        - rust
+        # Provides cargo, required by install-snow.sh
+        - nodejs
+        # Required by install-hotline.sh
+        - npm
+        # Required by install-hotline.sh
 
         # --- Lemonade local LLM server (provides lemond.service) ---
         - lemonade
@@ -218,15 +223,15 @@ modules:
       - iommu.strict=1
       - lockdown=confidentiality
       - module.sig_enforce=1
-      #Any future AKMODS support will need to be signed
+      # Any future AKMODS support will need to be signed
       - l1d_flush=on
       - l1tf=full,force
       - spec_store_bypass_disable=on
       - spectre_v2=on
       - ssbd=force-on
       # Optional runtime Hardening
-      #   sudo rpm-ostree kargs --append=slab_debug=FZ
-      #   sudo systemctl reboot
+      # sudo rpm-ostree kargs --append=slab_debug=FZ
+      # sudo systemctl reboot
       # slab_debug=FZ already implies slab_nomerge; add slab_nomerge alone only
       # if you want cache isolation without the sanity-check overhead.
       - random.trust_bootloader=off
@@ -244,7 +249,7 @@ modules:
       - source: system/var/usrlocal
         destination: /usr/local
         toggle-ownership: false
-        #Done to avoid permissions issues on/usr/local tree
+        # Done to avoid permissions issues on /usr/local tree
       - source: system/usr/share
         destination: /usr/share
       - source: system/usr/local/bin
@@ -275,8 +280,8 @@ modules:
     scripts:
       # Build & install the full GNUstep stack from source with a single
       # Clang 21 + libobjc2 toolchain:
-      #   libobjc2 -> libdispatch -> gnustep-make -> libs-base (Foundation)
-      #   -> libs-gui (AppKit + Tools/GSspell) -> libs-back (x11/cairo)
+      # libobjc2 -> libdispatch -> gnustep-make -> libs-base (Foundation)
+      # -> libs-gui (AppKit + Tools/GSspell) -> libs-back (x11/cairo)
       # then Gershwin (Eau theme, Menu.app) and GSDock via copy-assets.sh.
       # Fedora 45 does not package gnustep-gui/back, and its gnustep-base
       # headers are incompatible with modern Clang, so nothing from the
@@ -301,6 +306,9 @@ modules:
       - cuneiform-toggle.sh
       - enable-vaapi.sh
       - install-quiver.sh
+      # Triforce: download the latest Linux builder AppImage by default.
+      # Set TRIFORCE_BUILD_FROM_SOURCE=1 to build it from source instead.
+      - install-triforce.sh
 
   - type: default-flatpaks
     configurations:
@@ -311,29 +319,35 @@ modules:
           - net.waterfox.waterfox
           - org.torproject.torbrowser-launcher
           - com.visualstudio.code
+
           # Communication
           - com.discordapp.Discord
+
           # Media
           - org.strawberrymusicplayer.strawberry
           - org.audacityteam.Audacity
           - dk.gqrx.gqrx
           - org.lyx.LyX
+
           # Creativity and science
           - org.kde.krita
           - org.kde.haruna
           - org.stellarium.Stellarium
+
           # Productivity
           - io.github.diegopvlk.Dosage
           - org.gnuhealth.mygnuhealth
           - app.gmtp.gMTP
           - as.may.moat
           - io.github.heidefinnischen.cuneo
+
           # Utilities
           - io.github.kolunmi.Bazaar
           - org.freedownloadmanager.Manager
           - com.github.tchx84.Flatseal
           - com.github.zocker_160.SyncThingy
           - org.localsend.localsend_app
+
           # Gaming
           - com.valvesoftware.Steam
           - com.valvesoftware.Steam.CompatibilityTool.Proton
@@ -351,15 +365,20 @@ modules:
           - com.epicgames.ut2004
           - com.heroicgameslauncher.hgl
           - net.lutris.Lutris
+
           # Streaming
           - com.obsproject.Studio
           - com.chatterino.chatterino
+
           # Vulkan layers
           - org.freedesktop.Platform.VulkanLayer.MangoHud
           - org.freedesktop.Platform.VulkanLayer.gamescope
+
           # Runtime
           - org.freedesktop.Platform
+
       - scope: user
 
   - type: initramfs
+
   - type: signing
