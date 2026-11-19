@@ -6,7 +6,6 @@ echo "--- Installing Quiver Launcher (AppImage) ---"
 # Quiver Launcher is a single launcher that replaces the five standalone
 # installs this image used to ship:
 #   * Daggerfall Unity             -> Interkarma/daggerfall-unity            (community catalog)
-#   * Ship of Harkinian            -> HarbourMasters/Shipwright              (community catalog)
 #   * 2 Ship 2 Harkinian           -> HarbourMasters/2ship2harkinian         (community catalog)
 #   * Super Mario Bros. Remastered -> JHDev2006/Super-Mario-Bros.-Remastered-Public (community catalog)
 #   * SA Mod Manager               -> not covered; use Flatpak Hedge Mod Manager
@@ -101,14 +100,6 @@ cat > /etc/skel/.local/share/QuiverLauncher/apps.json << 'EOF'
       "folderName": "TheElderScrollsIIDaggerfall-DaggerfallUnity",
       "appIconUrl": "https://cdn2.steamgriddb.com/icon/f834b70560c3ca992ff72b5983170816/32/256x256.png",
       "tags": ["recreation", "pc", "elder scrolls"]
-    },
-    {
-      "name": "The Legend of Zelda: Ocarina of Time",
-      "project": "Ship of Harkinian",
-      "repository": "HarbourMasters/Shipwright",
-      "folderName": "TheLegendOfZeldaOcarinaOfTime-ShipOfHarkinian",
-      "appIconUrl": "https://raw.githubusercontent.com/HarbourMasters/Shipwright/refs/heads/develop/soh/SHIPOFHARKINIAN.ico",
-      "tags": ["decomp", "n64", "harbour masters", "zelda"]
     },
     {
       "name": "The Legend of Zelda: Majora's Mask",
