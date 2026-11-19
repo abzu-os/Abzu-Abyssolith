@@ -330,7 +330,6 @@ modules:
           - io.github.heidefinnischen.cuneo
           # Utilities
           - io.github.kolunmi.Bazaar
-          - app.twintaillauncher.ttl
           - org.freedownloadmanager.Manager
           - com.github.tchx84.Flatseal
           - com.github.zocker_160.SyncThingy
@@ -342,6 +341,7 @@ modules:
           - com.steamgriddb.SGDBoop
           - com.vysp3r.ProtonPlus
           - com.github.Matoking.protontricks
+          - app.twintaillauncher.ttl
           - org.openmw.OpenMW
           - com.infochunk.OpenMadoola
           - io.jor.nanosaur
