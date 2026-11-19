@@ -83,7 +83,7 @@ gmtp-sync:
     flatpak run app.gmtp.gMTP &
 
 # Seed Quiver Launcher's library with the entries that used to be installed
-# standalone (Daggerfall Unity, Ship of Harkinian, 2 Ship 2 Harkinian and
+# standalone (Daggerfall Unity, 2 Ship 2 Harkinian and
 # Super Mario Bros. Remastered).
 # Quiver stores apps.json beside its AppImage, which is read-only on Abzu,
 # so it falls back to ~/.local/share/QuiverLauncher/. This recipe copies the
